@@ -10,6 +10,18 @@ try { view = sessionStorage.getItem('pk-view') || 'home'; tab = sessionStorage.g
 let pin = ''; try { pin = localStorage.getItem(PINKEY) || ''; } catch (e) {}
 
 const root = document.getElementById('root');
+/* ---------- Hell / Dunkel ---------- */
+const THEMES = { auto: { i: '🌗', n: 'Automatisch' }, light: { i: '☀️', n: 'Hell' }, dark: { i: '🌙', n: 'Dunkel' } };
+let theme = 'auto'; try { theme = localStorage.getItem('hourglass-theme') || 'auto'; } catch (e) {}
+const darkMq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+function applyTheme() {
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', theme);
+  const dark = theme === 'dark' || (theme === 'auto' && darkMq && darkMq.matches);
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', dark ? '#17161B' : '#FF7A59');
+}
+function setTheme(t) { theme = THEMES[t] ? t : 'auto'; try { localStorage.setItem('hourglass-theme', theme); } catch (e) {} applyTheme(); }
+if (darkMq && darkMq.addEventListener) darkMq.addEventListener('change', applyTheme);
+applyTheme();
 const toastEl = document.createElement('div'); toastEl.className = 'toast'; document.body.appendChild(toastEl);
 const syncEl = document.createElement('div'); syncEl.className = 'sync'; document.body.appendChild(syncEl);
 const mEl = document.createElement('div'); document.body.appendChild(mEl);
@@ -84,10 +96,11 @@ function logList(list, showKid) {
   const verb = (e) => e.kind === 'earn' ? 'verdient' : e.kind === 'spend' ? 'eingelöst' : e.pts > 0 ? 'Bonus' : 'Abzug';
   return '<ul class="log">' + list.map((e) => { const k = kidById(e.kid); return `<li>${k ? `<span class="who" style="--c:${k.color}">${esc(k.emoji)} ${esc(k.name)}</span>` : ''}<span class="ll">${esc(e.label)}<small>${verb(e)} · ${when(e.t)}</small></span><b class="${e.pts >= 0 ? 'plus' : 'minus'}">${e.pts > 0 ? '+' : ''}${e.pts}</b>${isParent() ? `<button class="x" data-a="undo" data-id="${e.id}" title="Rückgängig" aria-label="Rückgängig">↺</button>` : ''}</li>`; }).join('') + '</ul>';
 }
+const themeBtn = () => `<button class="icon" data-a="theme" aria-label="Darstellung: ${THEMES[theme].n}" title="Darstellung: ${THEMES[theme].n}">${THEMES[theme].i}</button>`;
 function topRight() {
-  if (!S.cfg.hasPin) return `<button class="icon" data-a="go" data-v="settings" aria-label="Einstellungen">⚙️</button>`;
-  return pinValid ? `<span style="display:flex;gap:8px"><button class="icon" data-a="lock" aria-label="Sperren">🔓</button><button class="icon" data-a="go" data-v="settings" aria-label="Einstellungen">⚙️</button></span>`
-    : `<button class="icon" data-a="unlock" aria-label="Eltern-Modus">🔒</button>`;
+  const set = `<button class="icon" data-a="go" data-v="settings" aria-label="Einstellungen">⚙️</button>`;
+  const btns = !S.cfg.hasPin ? set : pinValid ? `<button class="icon" data-a="lock" aria-label="Sperren">🔓</button>${set}` : `<button class="icon" data-a="unlock" aria-label="Eltern-Modus">🔒</button>`;
+  return `<span style="display:flex;gap:8px">${themeBtn()}${btns}</span>`;
 }
 function home() {
   return `<header class="top"><div><div class="brand">⏳ Hourglass</div><div class="sub">Punkte sammeln · Belohnungen einlösen</div></div>${topRight()}</header>
@@ -328,6 +341,7 @@ document.addEventListener('click', async (ev) => {
     case 'haApply': { const devId = document.getElementById('haDev').value;
       try { const r = await api('/api/op', { op: 'setWebhook', id: devId, url: haUrl(haValues()) }); S = r.state; render(); toast('Webhook übernommen – jetzt „Testen“ antippen'); }
       catch (e) { toast(e.message); } break; }
+    case 'theme': { const order = ['auto', 'light', 'dark']; setTheme(order[(order.indexOf(theme) + 1) % 3]); render(); toast(`${THEMES[theme].i} Darstellung: ${THEMES[theme].n}`); break; }
     case 'checkUpd': checkUpd(); break;
     case 'applyUpd': applyUpd(); break;
   }
