@@ -116,6 +116,84 @@ function kidView(k) {
   return `<header class="top" style="--c:${k.color}"><button class="icon" data-a="go" data-v="home" aria-label="Zurück">←</button><div class="kidhead"><span class="av">${esc(k.emoji)}</span><span class="nm">${esc(k.name)}</span><span class="bal">${k.pts}<small>Pkt</small></span></div></header>
   <div class="seg">${tabs.map(([t, l]) => `<button class="${tab === t ? 'on' : ''}" data-a="tab" data-v="${t}">${l}</button>`).join('')}</div><div style="--c:${k.color}">${body}</div>`;
 }
+/* ---------- Anleitung Home Assistant ---------- */
+const lsGet = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+function hookId() {
+  let id = lsGet('hourglass-hookid', '');
+  if (!id) { const a = new Uint8Array(12); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach((_, i) => { a[i] = Math.random() * 256; }); id = 'hourglass-switch-' + Array.from(a, (x) => x.toString(16).padStart(2, '0')).join(''); lsSet('hourglass-hookid', id); }
+  return id;
+}
+function haValues() {
+  return {
+    base: lsGet('hourglass-ha-base', 'http://192.168.178.10:8123').replace(/\/+$/, ''),
+    entity: lsGet('hourglass-ha-entity', 'number.DEINE_SWITCH_maximale_bildschirmzeit_heute'),
+    id: hookId(),
+  };
+}
+function haYaml(v) {
+  return `alias: Hourglass – Switch freischalten
+description: Wird von Hourglass beim Einlösen von Switch-Zeit aufgerufen
+mode: queued
+triggers:
+  - trigger: webhook
+    webhook_id: ${v.id}
+    allowed_methods: [POST]
+    local_only: true
+conditions:
+  - condition: template
+    value_template: "{{ 0 < trigger.json.minuten | int(0) <= 120 }}"
+actions:
+  - variables:
+      limit_entity: ${v.entity}
+      aktuell: "{{ states(limit_entity) | int(0) }}"
+      step: "{{ state_attr(limit_entity, 'step') | int(1) }}"
+      maximum: "{{ state_attr(limit_entity, 'max') | int(360) }}"
+      roh: "{{ aktuell + trigger.json.minuten | int(0) }}"
+      neu: "{{ [((roh + step - 1) // step) * step, maximum] | min }}"
+  - condition: template
+    value_template: "{{ aktuell >= 0 }}"
+  - action: number.set_value
+    target:
+      entity_id: "{{ limit_entity }}"
+    data:
+      value: "{{ neu }}"
+  - action: logbook.log
+    data:
+      name: Hourglass
+      message: "{{ trigger.json.kind }} hat {{ trigger.json.minuten }} Min Switch-Zeit eingelöst (Limit heute jetzt {{ neu }} Min)"
+      entity_id: "{{ limit_entity }}"
+`;
+}
+const haUrl = (v) => `${v.base}/api/webhook/${v.id}`;
+let guideOpen = false;
+document.addEventListener('toggle', (ev) => { if (ev.target.classList && ev.target.classList.contains('guide')) guideOpen = ev.target.open; }, true);
+function haGuide() {
+  const v = haValues(), devs = S.devices || [];
+  const def = (devs.find((d) => /switch/i.test(d.id + d.name)) || devs[0] || {}).id;
+  return `<details class="card guide" ${guideOpen ? 'open' : ''}><summary>📖 Anleitung: Nintendo Switch über Home Assistant freischalten</summary>
+  <ol class="steps">
+   <li><b>Nintendo-Kindersicherungs-App:</b> Tägliches Spielzeit-Limit auf <b>0 Minuten</b> und <b>„Spiel unterbrechen“</b> einschalten. So ist die Switch standardmäßig gesperrt.</li>
+   <li><b>Home Assistant:</b> Unter <i>Einstellungen → Geräte & Dienste</i> die Integration <b>Nintendo Switch Parental Controls</b> hinzufügen (ab HA 2025.11). Dann unter <i>Entwicklerwerkzeuge → Zustände</i> die Entity für <b>Maximale Bildschirmzeit heute</b> heraussuchen.</li>
+   <li><b>Deine Angaben:</b>
+    <label class="gl">Adresse von Home Assistant (intern, mit <b>http://</b>)</label><input class="gi" data-g="base" value="${esc(v.base)}" placeholder="http://192.168.178.10:8123">
+    <label class="gl">Entity „Maximale Bildschirmzeit heute“</label><input class="gi" data-g="entity" value="${esc(v.entity)}" placeholder="number.…_maximale_bildschirmzeit_heute"></li>
+   <li><b>Automation anlegen:</b> <i>Einstellungen → Automationen & Szenen → Automation erstellen → Neue Automation → ⋮ → In YAML bearbeiten</i>. Den Inhalt komplett ersetzen und speichern:
+    <div class="codebox"><button class="copy" data-a="copy" data-t="haYaml">Kopieren</button><pre id="haYaml">${esc(haYaml(v))}</pre></div></li>
+   <li><b>Webhook beim Gerät eintragen:</b>
+    <div class="codebox"><button class="copy" data-a="copy" data-t="haUrl">Kopieren</button><pre id="haUrl">${esc(haUrl(v))}</pre></div>
+    <div class="btns"><select id="haDev">${devs.map((d) => `<option value="${d.id}" ${d.id === def ? 'selected' : ''}>${esc(d.emoji)} ${esc(d.name)}</option>`).join('')}</select><button class="pri" data-a="haApply">Bei diesem Gerät übernehmen</button></div></li>
+   <li><b>Testen:</b> Oben beim Gerät auf <b>Testen</b> tippen. Danach ein paar Minuten Switch-Zeit einlösen: In Home Assistant steigt „Maximale Bildschirmzeit heute“, und im Logbuch steht ein Eintrag von Hourglass.</li>
+  </ol>
+  <p class="hint">Den Webhook auch von außen erreichbar machen: In der Automation <code>local_only: false</code> setzen und als Adresse <code>https://&lt;deine-domain&gt;/api/webhook/…</code> verwenden. Pro Einlösung werden höchstens 120 Minuten angenommen.</p></details>`;
+}
+async function copyText(t, btn) {
+  let ok = false;
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(t); ok = true; } } catch (e) {}
+  if (!ok) { const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); try { ok = document.execCommand('copy'); } catch (e) {} ta.remove(); }
+  if (btn) { const o = btn.textContent; btn.textContent = ok ? '✓ Kopiert' : 'Bitte markieren'; setTimeout(() => { btn.textContent = o; }, 1800); }
+}
+
 function updateCard() {
   const v = version;
   let html = '<section class="card"><h2>App-Version & Updates</h2>';
@@ -140,6 +218,7 @@ function settings() {
   <section class="card"><h2>Medienzeit</h2><div class="row"><span class="grow" style="font-weight:700">Punkte pro Minute Medienzeit</span><input class="num" type="number" min="0.1" step="0.1" inputmode="decimal" value="${rate()}" data-a="mediaRate" aria-label="Punkte pro Minute"></div>
    <h3>Geräte</h3>${(S.devices || []).map((d) => `<div class="row wrap"><input class="emo" value="${esc(d.emoji)}" data-c="devices" data-id="${d.id}" data-f="emoji" aria-label="Symbol"><input style="flex:1" value="${esc(d.name)}" data-c="devices" data-id="${d.id}" data-f="name" aria-label="Gerät"><button class="del" data-a="del" data-c="devices" data-id="${d.id}" aria-label="Löschen">✕</button>
      <div class="btns" style="margin-top:0;flex:1 1 100%;align-items:center"><span class="hint" style="flex:1">${d.hasWebhook ? '🔗 Home Assistant verbunden' : 'Ohne Freischaltung'}</span><button data-a="webhook" data-id="${d.id}">${d.hasWebhook ? 'Webhook ändern' : 'Webhook eintragen'}</button>${d.hasWebhook ? `<button data-a="testDev" data-id="${d.id}">Testen</button>` : ''}</div></div>`).join('')}<button class="add" data-a="addDevice">+ Gerät</button></section>
+  ${haGuide()}
   <section class="card"><h2>Eltern-PIN</h2><p class="hint">${S.cfg.hasPin ? 'Ein PIN ist gesetzt. Ohne PIN sehen die Kinder nur ihre Punkte.' : 'Noch kein PIN – jeder kann buchen und Einstellungen ändern.'}</p>
    <div class="btns"><button class="pri" data-a="setPin">${S.cfg.hasPin ? 'PIN ändern' : 'PIN festlegen'}</button>${S.cfg.hasPin ? '<button data-a="removePin">PIN entfernen</button>' : ''}</div>
    ${S.cfg.hasPin ? `<label class="toggle">Kinder dürfen selbst Punkte buchen und einlösen<input type="checkbox" data-a="openBooking" ${S.cfg.openBooking ? 'checked' : ''}></label>` : ''}</section>
@@ -234,9 +313,19 @@ document.addEventListener('click', async (ev) => {
         try { const r = await api('/api/op', { op: 'setWebhook', id: d.id, url: document.getElementById('whUrl').value.trim() }); S = r.state; render(); toast('Gespeichert'); }
         catch (e) { document.getElementById('whErr').textContent = e.message; return false; } }); break; }
     case 'testDev': { b.disabled = true; try { await api('/api/op', { op: 'testDevice', id }); toast('✅ Home Assistant hat geantwortet'); } catch (e) { toast('❌ ' + e.message); } b.disabled = false; break; }
+    case 'copy': { const el = document.getElementById(b.dataset.t); if (el) copyText(el.textContent, b); break; }
+    case 'haApply': { const devId = document.getElementById('haDev').value;
+      try { const r = await api('/api/op', { op: 'setWebhook', id: devId, url: haUrl(haValues()) }); S = r.state; render(); toast('Webhook übernommen – jetzt „Testen“ antippen'); }
+      catch (e) { toast(e.message); } break; }
     case 'checkUpd': checkUpd(); break;
     case 'applyUpd': applyUpd(); break;
   }
+});
+document.addEventListener('input', (ev) => {
+  const el = ev.target; if (!el.dataset || !el.dataset.g) return;
+  lsSet(el.dataset.g === 'base' ? 'hourglass-ha-base' : 'hourglass-ha-entity', el.value.trim());
+  const v = haValues(); const y = document.getElementById('haYaml'), u = document.getElementById('haUrl');
+  if (y) y.textContent = haYaml(v); if (u) u.textContent = haUrl(v);
 });
 document.addEventListener('change', (ev) => {
   const el = ev.target; if (!S) return;
