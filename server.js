@@ -325,8 +325,11 @@ function sendToPrinter(buf) {
     const fail = (msg) => { sock.destroy(); reject(new Error(msg)); };
     sock.setTimeout(5000, () => fail('Drucker antwortet nicht (Zeitüberschreitung)'));
     sock.on('error', (e) => fail(e.code === 'ECONNREFUSED' ? 'Verbindung abgelehnt – stimmt der Port (meist 9100)?' : e.code === 'EHOSTUNREACH' || e.code === 'ENETUNREACH' ? 'Drucker im Netzwerk nicht erreichbar' : `Druckerfehler: ${e.code || e.message}`));
+    let done = false;
     sock.on('connect', () => sock.end(buf));
-    sock.on('close', (hadErr) => { if (!hadErr) resolve(); });
+    // Manche Drucker schließen die Verbindung nie selbst: sobald alles gesendet ist, gilt der Druck als übergeben
+    sock.on('finish', () => { done = true; setTimeout(() => sock.destroy(), 500); resolve(); });
+    sock.on('close', (hadErr) => { if (!hadErr && !done) resolve(); });
   });
 }
 function receiptFor(e) {
