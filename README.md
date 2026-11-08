@@ -16,6 +16,17 @@ Eine fertige Automation für die **Nintendo Switch** (Integration *Nintendo Swit
 
 > Die Webhook-Adresse ist wie ein Schlüssel: Die App zeigt sie nach dem Speichern nicht mehr an, auch nicht den Kindern. Trag in der YAML-Datei eine eigene, zufällige ID ein.
 
+## Installation auf UGREEN NAS (UGOS Pro)
+
+Dafür brauchst du weder SSH noch Git auf dem NAS.
+
+1. Im App Center **Docker** installieren, falls noch nicht geschehen
+2. *Docker → Projekt → Erstellen*: Einen Namen vergeben (z. B. `hourglass`) und einen Speicherort wählen
+3. Den Inhalt von [`ugreen/docker-compose.yml`](ugreen/docker-compose.yml) einfügen und bereitstellen
+4. Nach etwa einer Minute ist die App unter `http://<NAS-IP>:8742` erreichbar
+
+Beim ersten Start lädt der Container den Code von GitHub in den Projektordner (`./app`). Updates kommen danach wie gewohnt über den Knopf in der App. Die Punkte liegen in `./app/data/state.json`, also im Projektordner. Damit sind sie in einer NAS-Sicherung automatisch enthalten.
+
 ## Installation (Docker)
 
 ```bash

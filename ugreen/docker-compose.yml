@@ -1,0 +1,28 @@
+# Hourglass für UGREEN NAS (UGOS Pro) – Docker → Projekt → Erstellen → diesen Inhalt einfügen
+# Kein SSH und kein Git auf dem NAS nötig: Der Container lädt den Code beim ersten Start selbst von GitHub.
+# Code und Daten liegen danach im Projektordner unter ./app (Punkte: ./app/data/state.json).
+services:
+  hourglass:
+    image: node:22-alpine
+    container_name: hourglass
+    restart: unless-stopped          # startet die App nach einem Update automatisch neu
+    ports:
+      - "8742:8742"                  # links: Port am NAS, frei änderbar
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    environment:
+      TZ: Europe/Berlin
+      PORT: "8742"
+      DATA_DIR: /app/data
+      REPO_URL: https://github.com/n3rdz/Hourglass.git
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache git >/dev/null 2>&1 || echo "Hinweis: git konnte nicht installiert werden (Updates per Knopf gehen erst wieder mit Internet)"
+        git config --global --add safe.directory /app 2>/dev/null
+        if [ ! -d /app/.git ]; then
+          echo "Erster Start: lade Hourglass von $$REPO_URL ..."
+          rm -rf /tmp/src && git clone "$$REPO_URL" /tmp/src && cp -a /tmp/src/. /app/ && rm -rf /tmp/src
+        fi
+        exec node server.js
