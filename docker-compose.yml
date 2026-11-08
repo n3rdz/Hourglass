@@ -4,11 +4,12 @@ services:
     container_name: hourglass
     restart: unless-stopped        # wichtig: startet die App nach einem Update neu
     ports:
-      - "8080:8080"
+      - "8742:8742"      # links: Port auf dem Host, frei änderbar
     volumes:
       - ./:/app                    # Git-Checkout (Code + data/)
       # Für private Repos per SSH zusätzlich:
       # - ~/.ssh:/root/.ssh:ro
     environment:
       - TZ=Europe/Berlin
+      - PORT=8742
       # - GIT_BRANCH=main          # optional, sonst aktueller Branch

@@ -24,7 +24,7 @@ cd hourglass
 docker compose up -d --build
 ```
 
-Die App läuft dann unter `http://<server-ip>:8080`.
+Die App läuft dann unter `http://<server-ip>:8742`.
 
 > Wichtig: Der Code wird als Ordner in den Container eingebunden (`./:/app`), nicht ins Image kopiert. Nur so kann die App sich selbst aktualisieren. `restart: unless-stopped` sorgt dafür, dass sie nach dem Update automatisch neu startet.
 
@@ -41,12 +41,12 @@ Die App läuft dann unter `http://<server-ip>:8080`.
 
 Das Update ist ein `git merge --ff-only`. Hast du auf dem Server selbst etwas am Code geändert, bricht das Update ab, statt etwas zu überschreiben. Punkte und Einstellungen in `data/` sind von Git ausgenommen und bleiben beim Update erhalten.
 
-> Ändert sich nur das `Dockerfile` (z. B. eine neue Node-Version), reicht der Knopf nicht. Dann einmal `docker compose up -d --build` ausführen.
+> Ändern sich `Dockerfile` oder `docker-compose.yml` (z. B. eine neue Node-Version oder der Port), reicht der Knopf nicht. Dann einmal `docker compose up -d --build` ausführen.
 
 ## Ohne Docker
 
 ```bash
-node server.js          # Node 18+, Port per PORT=8080
+node server.js          # Node 18+, Port per PORT=8742 (Standard)
 ```
 
 Damit der Neustart nach einem Update klappt, sollte ein Dienst wie systemd den Prozess bei einem Exit automatisch neu starten (`Restart=always`).
