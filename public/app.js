@@ -248,19 +248,70 @@ function importPreview(list) {
 }
 
 function printerCard() {
-  const pr = S.cfg.printer || {};
-  return `<section class="card"><h2>🖨️ Bondrucker</h2>
-   <p class="hint">Netzwerk-Bondrucker mit ESC/POS (z. B. Epson TM-Serie oder viele 58/80-mm-Drucker mit LAN). Bei jeder Einlösung kommt ein Gutschein-Bon heraus.</p>
-   <div class="row"><input class="grow" data-p="host" value="${esc(pr.host || '')}" placeholder="IP-Adresse, z. B. 192.168.10.50" aria-label="Drucker-IP"><input class="num" style="width:86px" data-p="port" type="number" inputmode="numeric" value="${pr.port || 9100}" aria-label="Port"></div>
-   <div class="row"><span class="grow" style="font-weight:700">Papierbreite</span><select data-p="width">${[[48, '80 mm (48 Zeichen)'], [42, '80 mm (42 Zeichen)'], [32, '58 mm (32 Zeichen)']].map(([v, l]) => `<option value="${v}" ${pr.width === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+  const pr = S.cfg.printer || {}, ipp = pr.type === 'ipp';
+  return `<section class="card"><h2>🖨️ Drucker</h2>
+   <p class="hint">Bei jeder Einlösung kann ein Gutschein gedruckt werden.</p>
+   <div class="seg" style="margin:6px 0 10px"><button class="${!ipp ? 'on' : ''}" data-a="prType" data-v="escpos">🧾 Bondrucker</button><button class="${ipp ? 'on' : ''}" data-a="prType" data-v="ipp">🖨️ Normaler Drucker</button></div>
+   <p class="hint" style="font-size:12px">${ipp ? 'Für fast alle Netzwerkdrucker, die auch vom Handy aus drucken können (AirPrint/Mopria). Der Gutschein (10,5 × 7,4 cm) kommt oben auf eine A4-Seite, zum Ausschneiden.' : 'Für Bondrucker mit Netzwerkanschluss und ESC/POS (z. B. Epson TM-Serie oder viele 58/80-mm-Drucker mit LAN).'}</p>
+   <div class="row"><input class="grow" data-p="host" value="${esc(pr.host || '')}" placeholder="IP-Adresse, z. B. 192.168.10.50" aria-label="Drucker-IP"><input class="num" style="width:86px" data-p="port" type="number" inputmode="numeric" value="${pr.port || (ipp ? 631 : 9100)}" aria-label="Port"></div>
+   ${ipp ? `<div class="row"><span class="grow" style="font-weight:700">Pfad</span><input data-p="path" style="width:140px" value="${esc(pr.path || '/ipp/print')}" aria-label="IPP-Pfad"></div>`
+     : `<div class="row"><span class="grow" style="font-weight:700">Papierbreite</span><select data-p="width">${[[48, '80 mm (48 Zeichen)'], [42, '80 mm (42 Zeichen)'], [32, '58 mm (32 Zeichen)']].map(([v, l]) => `<option value="${v}" ${pr.width === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`}
    <label class="toggle">Bei jeder Einlösung automatisch drucken<input type="checkbox" data-p="auto" ${pr.auto ? 'checked' : ''}></label>
-   <label class="toggle">QR-Code auf den Bon drucken<input type="checkbox" data-p="qr" ${pr.qr ? 'checked' : ''}></label>
-   <div class="btns"><button data-a="testPrint" ${pr.host ? '' : 'disabled'}>Testdruck</button></div>
-   <p class="hint" style="font-size:12px">Port ist fast immer <b>9100</b>. Einzelne Einlösungen lassen sich im Verlauf mit 🖨️ nachdrucken.</p></section>`;
+   ${ipp ? '' : `<label class="toggle">QR-Code auf den Bon drucken<input type="checkbox" data-p="qr" ${pr.qr ? 'checked' : ''}></label>`}
+   <div class="btns"><button data-a="probePrinter" ${pr.host ? '' : 'disabled'}>Drucker prüfen</button><button data-a="testPrint" ${pr.host ? '' : 'disabled'}>Testdruck</button></div>
+   <div id="prInfo" class="hint" style="font-size:13px"></div>
+   <p class="hint" style="font-size:12px">${ipp ? 'Port ist fast immer <b>631</b>, der Pfad meist <b>/ipp/print</b>.' : 'Port ist fast immer <b>9100</b>.'} Einzelne Einlösungen lassen sich im Verlauf mit 🖨️ nachdrucken.</p></section>`;
 }
-function savePrinter() {
-  const g = (k) => root.querySelector(`[data-p="${k}"]`);
-  return op({ op: 'setPrinter', host: g('host').value.trim(), port: n(g('port').value), width: n(g('width').value), auto: g('auto').checked, qr: g('qr').checked });
+function savePrinter(type) {
+  const g = (k) => root.querySelector(`[data-p="${k}"]`), pr = S.cfg.printer || {};
+  const t = type || pr.type || 'escpos', switched = type && type !== pr.type;
+  return op({ op: 'setPrinter', type: t, host: g('host').value.trim(), port: switched ? (t === 'ipp' ? 631 : 9100) : n(g('port').value),
+    path: g('path') ? g('path').value.trim() : (pr.path || '/ipp/print'), width: g('width') ? n(g('width').value) : (pr.width || 48), auto: g('auto').checked, qr: g('qr') ? g('qr').checked : pr.qr !== false });
+}
+
+/* ---------- Gutschein als Grafik (für normale Drucker) ---------- */
+const noEmoji = (t) => String(t).replace(/\p{Extended_Pictographic}|️|‍/gu, '').replace(/\s+/g, ' ').trim();
+function voucherPixels(v) {
+  const W = 1240, H = 874, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), F = 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.fillStyle = '#000'; g.strokeStyle = '#000';
+  g.setLineDash([18, 12]); g.lineWidth = 4; g.strokeRect(6, 6, W - 12, H - 12); g.setLineDash([]);
+  const text = (t, y, size, weight = 700, max = W - 140) => { let s = size; do { g.font = `${weight} ${s}px ${F}`; s -= 4; } while (g.measureText(t).width > max && s > 20); g.textAlign = 'center'; g.fillText(t, W / 2, y); };
+  text('HOURGLASS', 105, 58, 900);
+  g.fillRect(70, 135, W - 140, 4);
+  if (v.test) {
+    text('Testdruck', 330, 120, 900); text('Umlaute: ÄÖÜ äöü ß', 450, 50, 600);
+    text(new Date().toLocaleString('de-DE'), 540, 40, 500);
+  } else {
+    text('GUTSCHEIN', 205, 44, 800);
+    text(noEmoji(v.kid), 345, 120, 900);
+    text(noEmoji(v.what), 455, 78, 800);
+    g.fillRect(70, 510, W - 140, 3);
+    g.font = `500 40px ${F}`;
+    const row = (k, val, y) => { g.textAlign = 'left'; g.fillText(k, 90, y); g.textAlign = 'right'; g.fillText(val, W - 90, y); };
+    row('Eingelöst', v.when, 580); row('Punkte', String(v.pts), 640); row('Restpunkte', String(v.rest), 700); row('Nr.', v.nr, 760);
+    text('Viel Spaß!', 838, 44, 800);
+  }
+  const d = g.getImageData(0, 0, W, H).data, px = new Uint8Array(W * H);
+  for (let i = 0; i < px.length; i++) px[i] = Math.round(d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114);
+  let bin = ''; for (let i = 0; i < px.length; i += 0x8000) bin += String.fromCharCode.apply(null, px.subarray(i, i + 0x8000));
+  return { w: W, h: H, data: btoa(bin) };
+}
+function voucherFor(e) {
+  const k = kidById(e.kid), id = String(e.id).toUpperCase();
+  return { kid: k ? k.name : '?', what: e.label, pts: e.pts, rest: k ? k.pts : '?', nr: `${id.slice(0, 4)}-${id.slice(4, 8)}`,
+    when: new Date(e.t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) };
+}
+async function printVoucher(entryId) { // druckt je nach Druckerart über den Server
+  const pr = S.cfg.printer || {};
+  if (pr.type !== 'ipp') return api('/api/op', { op: 'printEntry', id: entryId });
+  const e = S.log.find((x) => x.id === entryId); if (!e) throw new Error('Eintrag nicht gefunden');
+  return api('/api/op', { op: 'printImage', id: entryId, ...voucherPixels(voucherFor(e)) });
+}
+function autoPrint(x) { // nach einer Einlösung: normale Drucker werden vom Browser aus angestoßen
+  const pr = S.cfg.printer || {};
+  if (pr.type !== 'ipp' || !pr.host || !pr.auto || !x || !x.entry) return;
+  printVoucher(x.entry.id).then(() => toast('🖨️ Gutschein wird gedruckt')).catch((e) => toast('Gutschein konnte nicht gedruckt werden: ' + e.message));
 }
 
 function updateCard() {
@@ -346,7 +397,7 @@ document.addEventListener('click', async (ev) => {
     case 'lock': lock(); break;
     case 'earn': need(canEarn(), async () => { const t = S.tasks.find((x) => x.id === id); if (!t || !cur) return; const r = await op({ op: 'earn', kid: cur.id, task: t.id }); bump(); toast(`+${t.pts} für „${t.name}“`, r.entry.id); }); break;
     case 'spend': need(canSpend(), () => { const r = S.rewards.find((x) => x.id === id); if (!r || !cur) return;
-      modal(`<h4>${esc(r.emoji)} ${esc(r.name)} einlösen?</h4><p>${esc(cur.name)} hat ${cur.pts} Punkte. Danach bleiben ${cur.pts - r.cost}.</p>`, `${r.cost} Punkte einlösen`, async () => { const x = await op({ op: 'spend', kid: cur.id, reward: r.id }).catch(() => null); if (x) { bump(); toast(`${r.name} eingelöst – viel Spaß!` + printNote(x), x.entry.id); } }); }); break;
+      modal(`<h4>${esc(r.emoji)} ${esc(r.name)} einlösen?</h4><p>${esc(cur.name)} hat ${cur.pts} Punkte. Danach bleiben ${cur.pts - r.cost}.</p>`, `${r.cost} Punkte einlösen`, async () => { const x = await op({ op: 'spend', kid: cur.id, reward: r.id }).catch(() => null); if (x) { bump(); toast(`${r.name} eingelöst – viel Spaß!` + printNote(x), x.entry.id); autoPrint(x); } }); }); break;
     case 'adjust': need(isParent(), () => { if (!cur) return;
       modal(`<h4>Punkte für ${esc(cur.name)}</h4><label>Punkte (minus = abziehen)</label><input id="adjP" type="number" inputmode="numeric" value="5"><div class="quick">${[-10, -5, 5, 10, 20].map((v) => `<button data-a="q" data-v="${v}">${v > 0 ? '+' : ''}${v}</button>`).join('')}</div><label>Grund</label><input id="adjR" placeholder="z. B. Oma beim Einkaufen geholfen">`, 'Buchen', async () => {
         const p = n(document.getElementById('adjP').value); if (!p) return false; const label = document.getElementById('adjR').value.trim();
@@ -354,7 +405,7 @@ document.addEventListener('click', async (ev) => {
     case 'media': case 'mediaCustom': need(canSpend(), () => { if (!cur) return;
       const dev = (S.devices || []).find((d) => d.id === mediaDev);
       const doMedia = async (min) => { const x = await op({ op: 'media', kid: cur.id, minutes: min, device: dev ? dev.id : '' }).catch(() => null);
-        if (x) { bump(); toast((x.unlocked ? `${dev.name}: ${min} Min freigeschaltet – viel Spaß!` : `${min} Min ${dev ? dev.name : 'Medienzeit'} – viel Spaß!`) + printNote(x), x.entry.id); } };
+        if (x) { bump(); toast((x.unlocked ? `${dev.name}: ${min} Min freigeschaltet – viel Spaß!` : `${min} Min ${dev ? dev.name : 'Medienzeit'} – viel Spaß!`) + printNote(x), x.entry.id); autoPrint(x); } };
       if (a === 'media') { const min = n(b.dataset.v), cost = Math.ceil(min * rate());
         modal(`<h4>${dev ? esc(dev.emoji) + ' ' + min + ' Min ' + esc(dev.name) : '📺 ' + min + ' Min Medienzeit'} einlösen?</h4>${dev && dev.hasWebhook ? '<p>Wird danach automatisch freigeschaltet.</p>' : ''}<p>${esc(cur.name)} hat ${cur.pts} Punkte. Danach bleiben ${cur.pts - cost}.</p>`, `${cost} Punkte einlösen`, () => doMedia(min)); }
       else modal(`<h4>${dev ? esc(dev.emoji) + ' ' + esc(dev.name) : '📺 Medienzeit'} für ${esc(cur.name)}</h4><p>Möglich: bis zu ${minutesFor(cur.pts)} Min (${rateText()}).</p><label>Minuten</label><input id="medMin" type="number" min="1" inputmode="numeric" value="${Math.min(20, minutesFor(cur.pts))}"><div id="medErr" class="err"></div>`, 'Einlösen', async () => {
@@ -389,8 +440,15 @@ document.addEventListener('click', async (ev) => {
       try { const r = await api('/api/op', { op: 'setWebhook', id: devId, url: haUrl(haValues()) }); S = r.state; render(); toast('Webhook übernommen – jetzt „Testen“ antippen'); }
       catch (e) { toast(e.message); } break; }
     case 'theme': { const order = ['auto', 'light', 'dark']; setTheme(order[(order.indexOf(theme) + 1) % 3]); render(); toast(`${THEMES[theme].i} Darstellung: ${THEMES[theme].n}`); break; }
-    case 'testPrint': { b.disabled = true; try { await api('/api/op', { op: 'testPrint' }); toast('🖨️ Testdruck gesendet'); } catch (e) { toast('❌ ' + e.message); } b.disabled = false; break; }
-    case 'print': { try { await api('/api/op', { op: 'printEntry', id }); toast('🖨️ Bon wird gedruckt'); } catch (e) { toast('❌ ' + e.message); } break; }
+    case 'testPrint': { b.disabled = true; try { const pr = S.cfg.printer || {};
+        if (pr.type === 'ipp') { const r = await api('/api/op', { op: 'printImage', test: true, ...voucherPixels({ test: true }) }); toast(`🖨️ Testdruck gesendet (${r.format})`); }
+        else { await api('/api/op', { op: 'testPrint' }); toast('🖨️ Testdruck gesendet'); } } catch (e) { toast('❌ ' + e.message); } b.disabled = false; break; }
+    case 'print': { try { await printVoucher(id); toast('🖨️ Gutschein wird gedruckt'); } catch (e) { toast('❌ ' + e.message); } break; }
+    case 'prType': savePrinter(b.dataset.v).catch(() => {}); break;
+    case 'probePrinter': { b.disabled = true; const info = document.getElementById('prInfo'); if (info) info.textContent = '⏳ Frage den Drucker …';
+      try { const r = await api('/api/op', { op: 'probePrinter' });
+        if (info) info.innerHTML = r.formats ? `✅ <b>${esc(r.model)}</b><br>${r.format ? `Druckt als <code>${esc(r.format)}</code>` : `⚠️ Kein passendes Format gefunden. Der Drucker kann: ${esc(r.formats.join(', '))}`}` : `✅ ${esc(r.model)}`;
+      } catch (e) { if (info) info.textContent = '❌ ' + e.message; } b.disabled = false; break; }
     case 'importTasks':
       modal(`<h4>📋 Aufgaben aus Liste einfügen</h4><p>Eine Aufgabe pro Zeile, die Punkte am Ende, z. B. <code>Katzen füttern 5</code>. Vorhandene Aufgaben mit gleichem Namen bekommen die neuen Punkte. Die Kategorie wird geraten und lässt sich danach ändern.</p>
         <textarea id="impText" rows="8" placeholder="Kinderzimmer aufgeräumt 30

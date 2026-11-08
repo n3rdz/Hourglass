@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const net = require('net');
+const ipp = require('./ipp');
 
 const PORT = parseInt(process.env.PORT || '8742', 10);
 const ROOT = __dirname;
@@ -24,7 +25,7 @@ const CAT_RULES = [ // für die einmalige Zuordnung bestehender Aufgaben
 const DEFAULT = {
   v: 1, rev: 0,
   cfg: { pinHash: '', pinSalt: '', kidEarn: false, kidSpend: true, mediaRate: 1, catsV: 2,
-    printer: { host: '', port: 9100, width: 48, auto: true, qr: true } },
+    printer: { type: 'escpos', host: '', port: 9100, path: '/ipp/print', width: 48, auto: true, qr: true } },
   devices: [
     { id: 'tv', name: 'Fernsehen', emoji: '📺', webhook: '' },
     { id: 'switch', name: 'Nintendo Switch', emoji: '🎮', webhook: '' },
@@ -129,7 +130,7 @@ async function versionInfo() {
 let updating = false;
 
 /* ---------- Operationen ---------- */
-const PARENT_OPS = new Set(['settings', 'setPin', 'setKidPerm', 'setPrinter', 'testPrint', 'printEntry', 'setMediaRate', 'setWebhook', 'testDevice', 'undo', 'adjust']);
+const PARENT_OPS = new Set(['settings', 'setPin', 'setKidPerm', 'setPrinter', 'testPrint', 'printEntry', 'probePrinter', 'setMediaRate', 'setWebhook', 'testDevice', 'undo', 'adjust']);
 const KID_PERM = { earn: 'kidEarn', spend: 'kidSpend', media: 'kidSpend' };
 function apply(op, b) {
   const kid = (id) => S.kids.find((k) => k.id === id);
@@ -199,7 +200,10 @@ function apply(op, b) {
       if (host && !/^[a-z0-9.\-:\[\]]+$/i.test(host)) throw new Error('Ungültige Drucker-Adresse');
       const port = int(b.port) || 9100;
       if (port < 1 || port > 65535) throw new Error('Ungültiger Port');
-      S.cfg.printer = { host, port, width: [32, 42, 48].includes(int(b.width)) ? int(b.width) : 48, auto: !!b.auto, qr: !!b.qr };
+      const type = b.type === 'ipp' ? 'ipp' : 'escpos';
+      const path = str(b.path, 100) || '/ipp/print';
+      if (!/^\/[\w\-./]*$/.test(path)) throw new Error('Ungültiger Pfad');
+      S.cfg.printer = { type, host, port, path, width: [32, 42, 48].includes(int(b.width)) ? int(b.width) : 48, auto: !!b.auto, qr: !!b.qr };
       return {};
     }
     case 'setKidPerm': {
@@ -345,7 +349,7 @@ function send(res, code, obj) { res.writeHead(code, { 'Content-Type': 'applicati
 function body(req) {
   return new Promise((resolve, reject) => {
     let d = '';
-    req.on('data', (c) => { d += c; if (d.length > 1e6) { reject(new Error('zu groß')); req.destroy(); } });
+    req.on('data', (c) => { d += c; if (d.length > 5e6) { reject(new Error('zu groß')); req.destroy(); } });
     req.on('end', () => { try { resolve(d ? JSON.parse(d) : {}); } catch { reject(new Error('Ungültiges JSON')); } });
   });
 }
@@ -368,6 +372,26 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/op' && req.method === 'POST') {
       const b = await body(req);
+      if (b.op === 'printImage') { // Gutschein-Grafik aus dem Browser auf normalem Netzwerkdrucker (IPP) drucken
+        const e = b.id ? S.log.find((x) => x.id === b.id) : null;
+        const fresh = e && e.kind === 'spend' && Date.now() - e.t < 120000 && S.cfg.kidSpend; // Kind druckt die eigene, gerade erfolgte Einlösung
+        if (!pinOk(pin) && !fresh) return send(res, 403, { error: 'Eltern-PIN nötig' });
+        if (!b.test && !e) throw new Error('Eintrag nicht gefunden');
+        const w = int(b.w), h = int(b.h), px = Buffer.from(String(b.data || ''), 'base64');
+        if (w < 50 || h < 50 || w > 2400 || h > 2400 || px.length !== w * h) throw new Error('Ungültige Gutschein-Grafik');
+        const pr = S.cfg.printer;
+        if (!pr.host || pr.type !== 'ipp') throw new Error('Kein normaler Netzwerkdrucker eingerichtet');
+        const r = await ipp.printImage(pr, { w, h, px }, b.test ? 'Hourglass-Testdruck' : 'Hourglass-Gutschein');
+        return send(res, 200, { ok: true, ...r });
+      }
+      if (b.op === 'probePrinter') {
+        if (!pinOk(pin)) return send(res, 403, { error: 'Eltern-PIN nötig' });
+        const pr = S.cfg.printer;
+        if (!pr.host) throw new Error('Keine Drucker-Adresse eingetragen');
+        if (pr.type !== 'ipp') { await sendToPrinter(Buffer.alloc(0)); return send(res, 200, { ok: true, model: 'Bondrucker erreichbar (Port ' + pr.port + ')' }); }
+        const info = await ipp.probe(pr);
+        return send(res, 200, { ok: true, ...info });
+      }
       const needsParent = PARENT_OPS.has(b.op) || !S.cfg[KID_PERM[b.op]];
       if (needsParent && !pinOk(pin)) return send(res, 403, { error: 'Eltern-PIN nötig' });
       if (b.op === 'testPrint') {
@@ -397,7 +421,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
       persist();
-      if (out.entry && out.entry.kind === 'spend' && S.cfg.printer.host && S.cfg.printer.auto) {
+      if (out.entry && out.entry.kind === 'spend' && S.cfg.printer.host && S.cfg.printer.auto && S.cfg.printer.type !== 'ipp') {
         try { await printEntry(out.entry); out.printed = true; }
         catch (e) { out.printError = e.message; } // Einlösung bleibt gültig, nur der Bon fehlt
       }
