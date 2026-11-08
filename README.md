@@ -1,4 +1,4 @@
-# ⭐ Punktekonto
+# ⏳ Hourglass
 
 Mit dieser Familien-App sammeln die Kinder Punkte für Haushalt, Hausaufgaben, Instrument üben usw. und tauschen sie gegen Medienzeit (Standard: **1 Punkt = 1 Minute**) oder andere Belohnungen ein.
 
@@ -19,8 +19,8 @@ Eine fertige Automation für die **Nintendo Switch** (Integration *Nintendo Swit
 ## Installation (Docker)
 
 ```bash
-git clone <DEIN-REPO-URL> punktekonto
-cd punktekonto
+git clone https://github.com/n3rdz/Hourglass.git hourglass
+cd hourglass
 docker compose up -d --build
 ```
 
@@ -30,7 +30,7 @@ Die App läuft dann unter `http://<server-ip>:8080`.
 
 ### Private Repos
 
-- **HTTPS mit Token:** `git clone https://<token>@github.com/<user>/punktekonto.git`. Das Token muss nur Leserechte haben (Fine-grained Token, *Contents: read*).
+- **HTTPS mit Token:** `git clone https://<token>@github.com/n3rdz/Hourglass.git`. Das Token muss nur Leserechte haben (Fine-grained Token, *Contents: read*).
 - **SSH:** In `docker-compose.yml` die Zeile `~/.ssh:/root/.ssh:ro` aktivieren.
 
 ## Workflow für Änderungen

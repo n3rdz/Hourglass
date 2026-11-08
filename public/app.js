@@ -3,7 +3,7 @@
 const CATS = { haushalt: { n: 'Haushalt', e: '🧹' }, schule: { n: 'Schule', e: '📚' }, musik: { n: 'Musik', e: '🎵' }, sonst: { n: 'Sonstiges', e: '⭐' } };
 const COLORS = ['#FF7A59', '#4C9AFF', '#2FB37A', '#A97BE8', '#F2A31B', '#E8578A'];
 const EMOJIS = ['🦊', '🐼', '🦁', '🐸', '🐙', '🦄', '🐯', '🐨', '🐶', '🐱', '🚀', '⚽', '🌟', '🦖'];
-const PINKEY = 'punktekonto-pin';
+const PINKEY = 'hourglass-pin';
 
 let S = null, online = false, view = 'home', tab = 'earn', pinValid = false, version = null, upd = null, mediaDev = null;
 try { view = sessionStorage.getItem('pk-view') || 'home'; tab = sessionStorage.getItem('pk-tab') || 'earn'; } catch (e) {}
@@ -89,7 +89,7 @@ function topRight() {
     : `<button class="icon" data-a="unlock" aria-label="Eltern-Modus">🔒</button>`;
 }
 function home() {
-  return `<header class="top"><div><div class="brand">⭐ Punktekonto</div><div class="sub">Punkte sammeln · Belohnungen einlösen</div></div>${topRight()}</header>
+  return `<header class="top"><div><div class="brand">⏳ Hourglass</div><div class="sub">Punkte sammeln · Belohnungen einlösen</div></div>${topRight()}</header>
   <div class="kids">${S.kids.map((k) => { const nx = nextReward(k); const pct = nx ? Math.max(0, Math.min(100, k.pts / nx.cost * 100)) : 100;
     return `<button class="kid" style="--c:${k.color}" data-a="go" data-v="kid:${k.id}"><span class="av">${esc(k.emoji)}</span><span class="kn">${esc(k.name)}</span><span class="kp">${k.pts}<small>Punkte</small></span><span class="next">📺 ${minutesFor(k.pts)} Min Medienzeit${nx ? ` · noch ${nx.cost - k.pts} bis ${esc(nx.emoji)} ${esc(nx.name)}` : ''}</span><span class="bar"><i style="width:${pct}%"></i></span></button>`; }).join('')}</div>
   ${S.kids.length ? '' : '<p class="empty">Lege in den Einstellungen ⚙️ deine Kinder an.</p>'}

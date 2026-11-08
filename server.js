@@ -1,4 +1,4 @@
-// Punktekonto – kleiner Server ohne externe Abhängigkeiten (Node >= 18)
+// Hourglass – kleiner Server ohne externe Abhängigkeiten (Node >= 18)
 'use strict';
 const http = require('http');
 const fs = require('fs');
@@ -276,5 +276,5 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { send(res, 400, { error: e.message }); }
 });
 
-server.listen(PORT, () => console.log(`Punktekonto läuft auf http://0.0.0.0:${PORT}`));
+server.listen(PORT, () => console.log(`Hourglass läuft auf http://0.0.0.0:${PORT}`));
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => process.exit(0));

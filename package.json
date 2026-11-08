@@ -1,5 +1,5 @@
 {
-  "name": "punktekonto",
+  "name": "hourglass",
   "version": "1.0.0",
   "description": "Punkte sammeln für Haushalt, Hausaufgaben & Üben – und gegen Medienzeit eintauschen",
   "main": "server.js",

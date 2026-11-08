@@ -1,4 +1,4 @@
-# Home Assistant Automation: Nintendo Switch per Punktekonto freischalten
+# Home Assistant Automation: Nintendo Switch per Hourglass freischalten
 # Einfügen unter: Einstellungen → Automationen → Neue Automation → ⋮ → In YAML bearbeiten
 #
 # Voraussetzungen in der Nintendo-Kindersicherungs-App:
@@ -6,14 +6,14 @@
 #   - "Spiel unterbrechen" (Suspend software) einschalten
 #
 # Webhook-Adresse für die Punkte-App (Einstellungen → Medienzeit → Nintendo Switch → Webhook):
-#   http://<IP-von-Home-Assistant>:8123/api/webhook/punktekonto-switch-HIER-EIGENE-ZUFALLS-ID
+#   http://<IP-von-Home-Assistant>:8123/api/webhook/hourglass-switch-HIER-EIGENE-ZUFALLS-ID
 
-alias: Punktekonto – Switch freischalten
+alias: Hourglass – Switch freischalten
 description: Wird von der Punkte-App beim Einlösen von Switch-Zeit aufgerufen
 mode: queued
 triggers:
   - trigger: webhook
-    webhook_id: punktekonto-switch-HIER-EIGENE-ZUFALLS-ID
+    webhook_id: hourglass-switch-HIER-EIGENE-ZUFALLS-ID
     allowed_methods: [POST]
     local_only: true   # auf false setzen, falls die App über home.n3rdz.de (Internet) zugreift
 conditions:
@@ -36,6 +36,6 @@ actions:
       value: "{{ neu }}"
   - action: logbook.log
     data:
-      name: Punktekonto
+      name: Hourglass
       message: "{{ trigger.json.kind }} hat {{ trigger.json.minuten }} Min Switch-Zeit eingelöst (Limit heute jetzt {{ neu }} Min)"
       entity_id: "{{ limit_entity }}"
