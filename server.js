@@ -15,9 +15,15 @@ const PUBLIC = path.join(ROOT, 'public');
 const BRANCH = process.env.GIT_BRANCH || ''; // leer = aktueller Branch
 
 /* ---------- Daten ---------- */
+const CAT_IDS = ['haushalt', 'tiere', 'garten', 'schule', 'musik', 'bett', 'sonst'];
+const CAT_RULES = [ // für die einmalige Zuordnung bestehender Aufgaben
+  ['tiere', /katze|katzenklo|hund|gassi|tier|füttern|meerschwein|hase|kaninchen|aquarium|vogel/i],
+  ['garten', /garten|rasen|unkraut|gießen|laub|beet|hecke/i],
+  ['bett', /zähne|zahn|schlafanzug|bett|schlafen|gute nacht/i],
+];
 const DEFAULT = {
   v: 1, rev: 0,
-  cfg: { pinHash: '', pinSalt: '', kidEarn: false, kidSpend: true, mediaRate: 1,
+  cfg: { pinHash: '', pinSalt: '', kidEarn: false, kidSpend: true, mediaRate: 1, catsV: 2,
     printer: { host: '', port: 9100, width: 48, auto: true, qr: true } },
   devices: [
     { id: 'tv', name: 'Fernsehen', emoji: '📺', webhook: '' },
@@ -33,12 +39,12 @@ const DEFAULT = {
     ['t3', 'Kinderzimmer aufgeräumt', 'haushalt', 30], ['t15', 'Wohnzimmer aufräumen', 'haushalt', 20],
     ['t16', 'Schuhe & Jacke aufgeräumt', 'haushalt', 5],
     ['t5', 'Wäsche zusammenlegen', 'haushalt', 10], ['t13', 'Wäsche in den Schrank räumen', 'haushalt', 10],
-    ['t17', '30 Min Gartenarbeit', 'haushalt', 15], ['t4', 'Biomüll rausbringen', 'haushalt', 5],
-    ['t18', 'Restmüll rausbringen', 'haushalt', 5], ['t19', 'Katzen füttern', 'haushalt', 5],
-    ['t20', 'Katzenklos (beide) machen', 'haushalt', 10],
+    ['t17', '30 Min Gartenarbeit', 'garten', 15], ['t4', 'Biomüll rausbringen', 'haushalt', 5],
+    ['t18', 'Restmüll rausbringen', 'haushalt', 5], ['t19', 'Katzen füttern', 'tiere', 5],
+    ['t20', 'Katzenklos (beide) machen', 'tiere', 10],
     ['t6', 'Hausaufgaben erledigt', 'schule', 20], ['t7', 'Für Test gelernt', 'schule', 30], ['t8', 'Vokabeln geübt', 'schule', 10],
     ['t9', 'Instrument 15 Min geübt', 'musik', 15], ['t10', 'Instrument 30 Min geübt', 'musik', 30],
-    ['t21', 'Zähne putzen', 'sonst', 5], ['t22', 'Schlafanzug anziehen', 'sonst', 5], ['t11', '20 Min gelesen', 'sonst', 20],
+    ['t21', 'Zähne putzen', 'bett', 5], ['t22', 'Schlafanzug anziehen', 'bett', 5], ['t11', '20 Min gelesen', 'sonst', 20],
   ].map(([id, name, cat, pts]) => ({ id, name, cat, pts })),
   rewards: [
     ['r4', 'Lieblingsessen aussuchen', '🍕', 100], ['r5', 'Kino oder Ausflug', '🎬', 300],
@@ -50,24 +56,36 @@ let S;
 function load() {
   try { S = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
   catch { S = JSON.parse(JSON.stringify(DEFAULT)); }
+  let changed = false;
+  const oldCatsV = (S.cfg && S.cfg.catsV) || 1; // vor dem Zusammenführen mit den Standardwerten merken
   S.cfg = Object.assign({}, DEFAULT.cfg, S.cfg || {});
   S.cfg.printer = Object.assign({}, DEFAULT.cfg.printer, S.cfg.printer || {});
+  if (oldCatsV < 2) { // neue Kategorien Tiere, Garten, Bett: passende Aufgaben einmalig umsortieren
+    for (const t of S.tasks) {
+      if (t.cat !== 'haushalt' && t.cat !== 'sonst') continue;
+      const hit = CAT_RULES.find(([, re]) => re.test(t.name));
+      if (hit) t.cat = hit[0];
+    }
+    S.cfg.catsV = 2;
+    changed = true;
+  }
   if ('openBooking' in S.cfg) { // alte Einstellung: Kinder dürfen weiterhin einlösen, Gutschreiben bleibt Eltern-Sache
     S.cfg.kidSpend = true; S.cfg.kidEarn = false;
     delete S.cfg.openBooking;
   }
   for (const k of ['kids', 'tasks', 'rewards', 'log']) if (!Array.isArray(S[k])) S[k] = [];
   if (!Array.isArray(S.devices)) S.devices = JSON.parse(JSON.stringify(DEFAULT.devices));
+  return changed;
 }
-function persist() {
+function writeData() {
   S.rev = (S.rev || 0) + 1;
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const tmp = DATA_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(S, null, 1));
   fs.renameSync(tmp, DATA_FILE); // atomar
-  broadcast();
 }
-load();
+function persist() { writeData(); broadcast(); }
+if (load() && fs.existsSync(DATA_FILE)) writeData(); // Umstellung beim ersten Start gleich speichern
 
 const uid = () => crypto.randomBytes(5).toString('hex');
 const int = (v) => { v = parseInt(v, 10); return Number.isFinite(v) ? v : 0; };
@@ -154,7 +172,7 @@ function apply(op, b) {
       const clean = (arr, fn) => (Array.isArray(arr) ? arr : []).slice(0, 200).map(fn).filter((x) => x.id && !ids.has(x.id) && ids.add(x.id));
       const oldKids = new Map(S.kids.map((k) => [k.id, k]));
       const kids = clean(b.kids, (k) => ({ id: str(k.id, 20), name: str(k.name, 40) || 'Kind', emoji: str(k.emoji, 8) || '⭐', color: /^#[0-9a-f]{6}$/i.test(k.color) ? k.color : '#FF7A59', pts: oldKids.get(k.id)?.pts || 0 }));
-      const tasks = clean(b.tasks, (t) => ({ id: str(t.id, 20), name: str(t.name) || 'Aufgabe', cat: ['haushalt', 'schule', 'musik', 'sonst'].includes(t.cat) ? t.cat : 'sonst', pts: Math.max(0, Math.min(1000, int(t.pts))) }));
+      const tasks = clean(b.tasks, (t) => ({ id: str(t.id, 20), name: str(t.name) || 'Aufgabe', cat: CAT_IDS.includes(t.cat) ? t.cat : 'sonst', pts: Math.max(0, Math.min(1000, int(t.pts))) }));
       const rewards = clean(b.rewards, (r) => ({ id: str(r.id, 20), name: str(r.name) || 'Belohnung', emoji: str(r.emoji, 8) || '🎁', cost: Math.max(0, Math.min(100000, int(r.cost))) }));
       const oldDev = new Map(S.devices.map((d) => [d.id, d]));
       const devices = Array.isArray(b.devices) ? clean(b.devices, (d) => ({ id: str(d.id, 20), name: str(d.name, 40) || 'Gerät', emoji: str(d.emoji, 8) || '📺', webhook: oldDev.get(d.id)?.webhook || '' })) : S.devices;

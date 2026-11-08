@@ -1,8 +1,9 @@
 (() => {
 'use strict';
-const CATS = { haushalt: { n: 'Haushalt', e: '🧹' }, schule: { n: 'Schule', e: '📚' }, musik: { n: 'Musik', e: '🎵' }, sonst: { n: 'Sonstiges', e: '⭐' } };
+const CATS = { haushalt: { n: 'Haushalt', e: '🧹' }, tiere: { n: 'Tiere', e: '🐈', svg: '<svg class="ci" viewBox="0 0 24 24" aria-hidden="true"><path fill="#E5484D" d="M4.2 2.6c.4-.3 1-.2 1.3.2L8.4 6.4A10.6 10.6 0 0 1 12 5.8c1.3 0 2.5.2 3.6.6l2.9-3.6c.3-.4.9-.5 1.3-.2.3.2.4.5.4.9v6.7c.9 1.3 1.4 2.8 1.4 4.4 0 4.6-4.2 7.6-9.6 7.6S2.4 19.2 2.4 14.6c0-1.6.5-3.1 1.4-4.4V3.5c0-.4.1-.7.4-.9z"/><ellipse cx="8.6" cy="13.6" rx="1.3" ry="1.7" fill="#fff"/><ellipse cx="15.4" cy="13.6" rx="1.3" ry="1.7" fill="#fff"/><path d="M10.9 17.2h2.2L12 18.4z" fill="#fff"/></svg>' }, garten: { n: 'Garten', e: '🌱' }, schule: { n: 'Schule', e: '📚' }, musik: { n: 'Musik', e: '🎵' }, bett: { n: 'Bett', e: '🛏️' }, sonst: { n: 'Sonstiges', e: '⭐' } };
 const COLORS = ['#FF7A59', '#4C9AFF', '#2FB37A', '#A97BE8', '#F2A31B', '#E8578A'];
 const EMOJIS = ['🦊', '🐼', '🦁', '🐸', '🐙', '🦄', '🐯', '🐨', '🐶', '🐱', '🚀', '⚽', '🌟', '🦖'];
+const catIcon = (c) => (CATS[c] && (CATS[c].svg || CATS[c].e)) || '⭐';
 const PINKEY = 'hourglass-pin';
 
 let S = null, online = false, view = 'home', tab = 'earn', pinValid = false, version = null, upd = null, mediaDev = null;
@@ -115,7 +116,7 @@ function kidView(k) {
   const lockNote = (ok, txt) => ok ? '' : `<p class="hint" style="margin-top:14px">🔒 ${txt}</p>`;
   if (tab === 'earn') {
     body = lockNote(canEarn(), 'Punkte schreiben Mama oder Papa gut. Sag Bescheid, wenn du etwas erledigt hast!') + Object.entries(CATS).map(([c, m]) => { const ts = S.tasks.filter((t) => t.cat === c); if (!ts.length) return '';
-      return `<h3>${m.e} ${m.n}</h3><div class="tasks">${ts.map((t) => `<button class="task" data-a="earn" data-id="${t.id}"><span>${esc(t.name)}</span><b>+${t.pts}</b></button>`).join('')}</div>`; }).join('')
+      return `<h3>${catIcon(c)} ${m.n}</h3><div class="tasks">${ts.map((t) => `<button class="task" data-a="earn" data-id="${t.id}"><span>${esc(t.name)}</span><b>+${t.pts}</b></button>`).join('')}</div>`; }).join('')
       + (isParent() ? `<button class="ghost" data-a="adjust">± Eigene Punkte vergeben oder abziehen</button>` : '');
   } else if (tab === 'spend') {
     const maxMin = minutesFor(k.pts);
@@ -221,9 +222,12 @@ async function copyText(t, btn) {
 /* ---------- Aufgaben-Import ---------- */
 function guessCat(name) {
   const t = name.toLowerCase();
+  if (/katze|katzenklo|hund|gassi|tier|füttern|meerschwein|hase|kaninchen|aquarium|vogel/.test(t)) return 'tiere';
+  if (/garten|rasen|unkraut|gießen|laub|beet|hecke/.test(t)) return 'garten';
+  if (/zähne|zahn|schlafanzug|bett|schlafen|gute nacht/.test(t)) return 'bett';
   if (/hausaufgabe|\btest|klassenarbeit|schulaufgabe|vokabel|lern|schule|referat/.test(t)) return 'schule';
   if (/instrument|klavier|gitarre|geige|flöte|üb(en|t)|musik|trompete|schlagzeug/.test(t)) return 'musik';
-  if (/zähne|zahn|schlafanzug|anziehen|duschen|baden|gelesen|lesen|bett/.test(t)) return 'sonst';
+  if (/duschen|baden|gelesen|lesen/.test(t)) return 'sonst';
   return 'haushalt';
 }
 function parseTasks(text) {
@@ -240,7 +244,7 @@ function importPreview(list) {
   if (!list.length) return '<p class="hint">Noch keine gültigen Zeilen erkannt. Format: <code>Aufgabe  Punkte</code></p>';
   const known = new Map(S.tasks.map((t) => [t.name.toLowerCase(), t]));
   return `<p class="hint">${list.length} Aufgabe${list.length > 1 ? 'n' : ''} erkannt:</p><ul class="imp">${list.map((x) => { const k = known.get(x.name.toLowerCase());
-    return `<li><span>${CATS[guessCat(x.name)].e} ${esc(x.name)}</span><b>${x.pts}</b>${k ? `<small>${k.pts === x.pts ? 'schon vorhanden' : `ändert ${k.pts} → ${x.pts}`}</small>` : '<small>neu</small>'}</li>`; }).join('')}</ul>`;
+    return `<li><span>${catIcon(guessCat(x.name))} ${esc(x.name)}</span><b>${x.pts}</b>${k ? `<small>${k.pts === x.pts ? 'schon vorhanden' : `ändert ${k.pts} → ${x.pts}`}</small>` : '<small>neu</small>'}</li>`; }).join('')}</ul>`;
 }
 
 function printerCard() {

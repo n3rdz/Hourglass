@@ -133,3 +133,4 @@ html,body{transition:background-color .2s}
 .sortlist .row.dragging{transition:none;position:relative;z-index:5;box-shadow:0 10px 24px -8px var(--shadow);border-radius:12px}
 .sortlist .row.dragging .handle{cursor:grabbing;background:var(--chip)}
 body.sorting{user-select:none;-webkit-user-select:none;cursor:grabbing}
+.ci{width:1.15em;height:1.15em;vertical-align:-0.2em;display:inline-block}
