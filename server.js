@@ -187,8 +187,34 @@ async function callWebhook(dev, payload) {
   let r;
   try {
     r = await fetch(dev.webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(8000) });
-  } catch (e) { throw new Error('Home Assistant nicht erreichbar'); }
-  if (!r.ok) throw new Error(`Home Assistant antwortet mit ${r.status}`);
+  } catch (e) { throw new Error(webhookError(e, dev.webhook)); }
+  if (!r.ok) throw new Error(`Home Assistant antwortet mit Status ${r.status}${r.status === 405 ? ' – Methode nicht erlaubt, in der Automation allowed_methods: [POST] setzen' : ''}`);
+}
+
+function webhookError(e, url) {
+  const cause = e && e.cause;
+  const inner = cause && Array.isArray(cause.errors) && cause.errors[0];
+  const c = (cause && cause.code) || (inner && inner.code) || (e && e.name === 'TimeoutError' ? 'TimeoutError' : '') || (cause && cause.name !== 'Error' && cause.name) || '';
+  const https = /^https:/i.test(url);
+  const map = {
+    ECONNREFUSED: 'Verbindung abgelehnt – stimmen IP und Port?',
+    ENOTFOUND: 'Adresse nicht gefunden – Schreibweise der Adresse prüfen',
+    EAI_AGAIN: 'Adresse konnte nicht aufgelöst werden (DNS)',
+    EHOSTUNREACH: 'Gerät im Netzwerk nicht erreichbar',
+    ENETUNREACH: 'Netzwerk nicht erreichbar',
+    ECONNRESET: 'Verbindung wurde getrennt' + (https ? ' – spricht der Server vielleicht nur http?' : ''),
+    TimeoutError: 'keine Antwort innerhalb von 8 Sekunden',
+    ERR_SSL_WRONG_VERSION_NUMBER: 'der Server spricht kein https – bitte http:// verwenden',
+    EPROTO: 'der Server spricht kein https – bitte http:// verwenden',
+    ERR_TLS_CERT_ALTNAME_INVALID: 'das Zertifikat passt nicht zur Adresse – http:// mit der IP oder https:// mit dem Domainnamen verwenden',
+    DEPTH_ZERO_SELF_SIGNED_CERT: 'selbst signiertes Zertifikat – http:// verwenden',
+    SELF_SIGNED_CERT_IN_CHAIN: 'selbst signiertes Zertifikat – http:// verwenden',
+    UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'Zertifikat kann nicht geprüft werden – http:// verwenden',
+    CERT_HAS_EXPIRED: 'das Zertifikat ist abgelaufen',
+  };
+  const msg = map[c] || [c, cause && cause.message].filter(Boolean).join(': ') || (e && e.message) || 'unbekannter Fehler';
+  console.error('Webhook-Fehler:', c, e && e.cause ? e.cause.message : e && e.message);
+  return `Home Assistant nicht erreichbar: ${msg}`;
 }
 
 /* ---------- HTTP ---------- */
