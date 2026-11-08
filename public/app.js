@@ -174,13 +174,22 @@ function haGuide() {
   return `<details class="card guide" ${guideOpen ? 'open' : ''}><summary>📖 Anleitung: Nintendo Switch über Home Assistant freischalten</summary>
   <ol class="steps">
    <li><b>Nintendo-Kindersicherungs-App:</b> Tägliches Spielzeit-Limit auf <b>0 Minuten</b> und <b>„Spiel unterbrechen“</b> einschalten. So ist die Switch standardmäßig gesperrt.</li>
-   <li><b>Home Assistant:</b> Unter <i>Einstellungen → Geräte & Dienste</i> die Integration <b>Nintendo Switch Parental Controls</b> hinzufügen (ab HA 2025.11). Dann unter <i>Entwicklerwerkzeuge → Zustände</i> die Entity für <b>Maximale Bildschirmzeit heute</b> heraussuchen.</li>
+   <li><b>Integration in Home Assistant installieren</b> (ab Version 2025.11). Am besten am PC, auf dem die Nintendo-App <u>nicht</u> installiert ist:
+    <ol type="a" class="sub">
+     <li><i>Einstellungen → Geräte & Dienste</i>, unten rechts <b>+ Integration hinzufügen</b>, nach <b>Nintendo Switch Parental Controls</b> suchen.</li>
+     <li>Home Assistant fragt nach einem <b>Access Token</b> und zeigt dazu einen Link an. Diesen Link öffnen, es geht ein neuer Tab auf.</li>
+     <li>Im neuen Tab mit deinem <b>Nintendo-Konto</b> (Eltern-Konto) anmelden.</li>
+     <li>Auf der Seite zum Verknüpfen eines externen Kontos den roten Knopf <b>„Diese Person auswählen“</b> (engl. „Select this person“) <u>nicht</u> anklicken, sondern mit der <b>rechten Maustaste</b> auf <i>Link-Adresse kopieren</i> gehen. Am Handy den Knopf gedrückt halten.</li>
+     <li>Den Nintendo-Tab schließen und den kopierten Link (beginnt mit <code>npf…://auth#session_token_code=…</code>) komplett in das Feld <b>Access Token</b> einfügen, <b>Absenden</b>. Die danach angezeigten Optionen mit einem weiteren <b>Absenden</b> bestätigen.</li>
+     <li>Danach gibt es ein Gerät für deine Switch. Dort unter <i>Steuerelemente</i> die Zahl <b>„Maximale Bildschirmzeit heute“</b> anklicken, über das Zahnrad ⚙️ die <b>Entitäts-ID</b> kopieren (beginnt mit <code>number.</code>).</li>
+    </ol></li>
    <li><b>Deine Angaben:</b>
-    <label class="gl">Adresse von Home Assistant (intern, mit <b>http://</b>)</label><input class="gi" data-g="base" value="${esc(v.base)}" placeholder="http://192.168.178.10:8123">
-    <label class="gl">Entity „Maximale Bildschirmzeit heute“</label><input class="gi" data-g="entity" value="${esc(v.entity)}" placeholder="number.…_maximale_bildschirmzeit_heute"></li>
+    <label class="gl">Adresse von Home Assistant im Heimnetz</label><input class="gi" data-g="base" value="${esc(v.base)}" placeholder="http://192.168.178.10:8123">
+    <div class="hint" style="font-size:12px;margin-top:4px">Das ist die Adresse, mit der du Home Assistant zu Hause im Browser öffnest, meist <code>http://&lt;IP&gt;:8123</code>. Zu finden unter <i>Einstellungen → System → Netzwerk → Home Assistant-URL → Lokales Netzwerk</i>. Wichtig: <b>http://</b>, nicht https.</div>
+    <label class="gl">Entitäts-ID „Maximale Bildschirmzeit heute“ (aus Schritt 2f)</label><input class="gi" data-g="entity" value="${esc(v.entity)}" placeholder="number.…_maximale_bildschirmzeit_heute"></li>
    <li><b>Automation anlegen:</b> <i>Einstellungen → Automationen & Szenen → Automation erstellen → Neue Automation → ⋮ → In YAML bearbeiten</i>. Den Inhalt komplett ersetzen und speichern:
     <div class="codebox"><button class="copy" data-a="copy" data-t="haYaml">Kopieren</button><pre id="haYaml">${esc(haYaml(v))}</pre></div></li>
-   <li><b>Webhook beim Gerät eintragen:</b>
+   <li><b>Webhook beim Gerät eintragen:</b> Diese Adresse setzt sich aus deiner Home-Assistant-Adresse und der Webhook-ID aus der Automation zusammen. Sie wird oben automatisch erzeugt. Am einfachsten übernimmst du sie mit dem Knopf, sie lässt sich aber auch kopieren und oben beim Gerät unter „Webhook eintragen“ einfügen.
     <div class="codebox"><button class="copy" data-a="copy" data-t="haUrl">Kopieren</button><pre id="haUrl">${esc(haUrl(v))}</pre></div>
     <div class="btns"><select id="haDev">${devs.map((d) => `<option value="${d.id}" ${d.id === def ? 'selected' : ''}>${esc(d.emoji)} ${esc(d.name)}</option>`).join('')}</select><button class="pri" data-a="haApply">Bei diesem Gerät übernehmen</button></div></li>
    <li><b>Testen:</b> Oben beim Gerät auf <b>Testen</b> tippen. Danach ein paar Minuten Switch-Zeit einlösen: In Home Assistant steigt „Maximale Bildschirmzeit heute“, und im Logbuch steht ein Eintrag von Hourglass.</li>

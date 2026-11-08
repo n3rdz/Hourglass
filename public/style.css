@@ -110,3 +110,5 @@ h3{font-size:14px;font-weight:800;color:var(--muted);margin:18px 0 8px;text-tran
 .codebox .copy{position:absolute;top:6px;right:6px;border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:8px;padding:5px 10px;font-weight:800;font-size:12px}
 #haDev{border:1px solid var(--line);border-radius:10px;padding:9px;background:#FDFBF7;flex:1;min-width:0}
 .guide code{background:#F1EADF;border-radius:6px;padding:1px 5px;font-size:12px}
+.steps .sub{padding-left:18px;margin:6px 0 0}
+.steps .sub li{margin-bottom:6px}
