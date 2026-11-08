@@ -25,6 +25,21 @@ Unter *Einstellungen → Drucker* gibt es zwei Arten:
 
 Auf Wunsch wird bei jeder Einlösung automatisch gedruckt. Aus dem Verlauf lässt sich jeder Gutschein mit 🖨️ nachdrucken. Kann der Drucker nicht drucken, bleibt die Einlösung trotzdem gültig.
 
+## In Home Assistant anzeigen (auch unterwegs über Nabu Casa)
+
+Mit der HACS-Integration [Ingress](https://github.com/lovelylain/hass_ingress) wird Hourglass zu einem Menüpunkt in der Seitenleiste von Home Assistant. Es läuft dann automatisch über https, auch unterwegs über Nabu Casa, und ist durch den Login von Home Assistant geschützt. Hourglass selbst bleibt dabei nur im Heimnetz erreichbar.
+
+1. HACS → ⋮ → *Benutzerdefinierte Repositories* → `https://github.com/lovelylain/hass_ingress` (Typ: Integration) → **Ingress** herunterladen
+2. In `configuration.yaml` ergänzen und Home Assistant neu starten:
+   ```yaml
+   ingress:
+     hourglass:
+       title: Hourglass
+       icon: mdi:timer-sand
+       url: http://192.168.10.200:8742
+   ```
+3. In der Seitenleiste erscheint **Hourglass**.
+
 ## Installation auf UGREEN NAS (UGOS Pro)
 
 Dafür brauchst du weder SSH noch Git auf dem NAS.

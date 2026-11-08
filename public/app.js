@@ -45,8 +45,10 @@ function when(t) {
 }
 
 /* ---------- API ---------- */
+// Pfade relativ zur Seite, damit die App auch unter einem Unterpfad läuft (z. B. Home-Assistant-Ingress)
+const rel = (p) => p.replace(/^\//, '');
 async function api(path, data) {
-  const r = await fetch(path, { method: data ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'X-Pin': pin }, body: data ? JSON.stringify(data) : undefined });
+  const r = await fetch(rel(path), { method: data ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'X-Pin': pin }, body: data ? JSON.stringify(data) : undefined });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(j.error || 'Fehler ' + r.status); e.status = r.status; throw e; }
   return j;
@@ -57,10 +59,13 @@ async function op(o) {
 }
 async function refresh() { S = await api('/api/state'); if (!drag && !(view === 'settings' && document.activeElement && document.activeElement.matches('input,select'))) render(); }
 function connect() {
-  const es = new EventSource('/api/events');
-  es.onopen = () => { online = true; updSync(); };
-  es.onmessage = (ev) => { if (!S || n(ev.data) !== S.rev) refresh().catch(() => {}); };
-  es.onerror = () => { online = false; updSync(); };
+  let esOk = false;
+  const es = new EventSource(rel('/api/events'));
+  es.onopen = () => { esOk = true; online = true; updSync(); };
+  es.onmessage = (ev) => { esOk = true; if (!S || n(ev.data) !== S.rev) refresh().catch(() => {}); };
+  es.onerror = () => { esOk = false; };
+  // Ersatz, falls Live-Updates unterwegs blockiert werden (z. B. durch einen Proxy): regelmäßig nachsehen
+  setInterval(() => { if (esOk) return; refresh().then(() => { online = true; updSync(); }).catch(() => { online = false; updSync(); }); }, 15000);
 }
 function updSync() { syncEl.textContent = (online ? '🟢 verbunden' : '🔴 keine Verbindung') + (S && S.cfg.hasPin ? (pinValid ? ' · 🔓 Eltern' : ' · 🔒 Kinder') : ''); }
 
