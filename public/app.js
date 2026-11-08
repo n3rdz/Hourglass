@@ -80,7 +80,8 @@ function bump() { const b = root.querySelector('.bal'); if (b) { b.classList.rem
 function nextReward(k) { return S.rewards.filter((r) => r.cost > k.pts).sort((a, b) => a.cost - b.cost)[0]; }
 function logList(list, showKid) {
   if (!list.length) return '<p class="empty">Noch nichts passiert.</p>';
-  return '<ul class="log">' + list.map((e) => { const k = kidById(e.kid); return `<li><span class="lt">${when(e.t)}</span><span class="ll">${showKid && k ? esc(k.emoji) + ' ' : ''}${esc(e.label)}</span><b class="${e.pts >= 0 ? 'plus' : 'minus'}">${e.pts > 0 ? '+' : ''}${e.pts}</b>${isParent() ? `<button class="x" data-a="undo" data-id="${e.id}" title="Rückgängig" aria-label="Rückgängig">↺</button>` : ''}</li>`; }).join('') + '</ul>';
+  const verb = (e) => e.kind === 'earn' ? 'verdient' : e.kind === 'spend' ? 'eingelöst' : e.pts > 0 ? 'Bonus' : 'Abzug';
+  return '<ul class="log">' + list.map((e) => { const k = kidById(e.kid); return `<li>${k ? `<span class="who" style="--c:${k.color}">${esc(k.emoji)} ${esc(k.name)}</span>` : ''}<span class="ll">${esc(e.label)}<small>${verb(e)} · ${when(e.t)}</small></span><b class="${e.pts >= 0 ? 'plus' : 'minus'}">${e.pts > 0 ? '+' : ''}${e.pts}</b>${isParent() ? `<button class="x" data-a="undo" data-id="${e.id}" title="Rückgängig" aria-label="Rückgängig">↺</button>` : ''}</li>`; }).join('') + '</ul>';
 }
 function topRight() {
   if (!S.cfg.hasPin) return `<button class="icon" data-a="go" data-v="settings" aria-label="Einstellungen">⚙️</button>`;
