@@ -17,6 +17,10 @@ const BRANCH = process.env.GIT_BRANCH || ''; // leer = aktueller Branch
 const DEFAULT = {
   v: 1, rev: 0,
   cfg: { pinHash: '', pinSalt: '', openBooking: false, mediaRate: 1 },
+  devices: [
+    { id: 'tv', name: 'Fernsehen', emoji: '📺', webhook: '' },
+    { id: 'switch', name: 'Nintendo Switch', emoji: '🎮', webhook: '' },
+  ],
   kids: [
     { id: 'k1', name: 'Theo', emoji: '🦊', color: '#FF7A59', pts: 0 },
     { id: 'k2', name: 'Ava', emoji: '🐼', color: '#4C9AFF', pts: 0 },
@@ -43,6 +47,7 @@ function load() {
   catch { S = JSON.parse(JSON.stringify(DEFAULT)); }
   S.cfg = Object.assign({}, DEFAULT.cfg, S.cfg || {});
   for (const k of ['kids', 'tasks', 'rewards', 'log']) if (!Array.isArray(S[k])) S[k] = [];
+  if (!Array.isArray(S.devices)) S.devices = JSON.parse(JSON.stringify(DEFAULT.devices));
 }
 function persist() {
   S.rev = (S.rev || 0) + 1;
@@ -65,8 +70,12 @@ function pinOk(pin) {
   return crypto.timingSafeEqual(h, Buffer.from(S.cfg.pinHash, 'hex'));
 }
 function publicState() {
-  const { cfg, ...rest } = S;
-  return { ...rest, cfg: { hasPin: !!cfg.pinHash, openBooking: !!cfg.openBooking, mediaRate: cfg.mediaRate || 1 } };
+  const { cfg, devices, ...rest } = S;
+  return {
+    ...rest,
+    devices: (devices || []).map(({ webhook, ...d }) => ({ ...d, hasWebhook: !!webhook })), // Webhook-URL bleibt geheim
+    cfg: { hasPin: !!cfg.pinHash, openBooking: !!cfg.openBooking, mediaRate: cfg.mediaRate || 1 },
+  };
 }
 
 /* ---------- Live-Updates (Server-Sent Events) ---------- */
@@ -92,7 +101,7 @@ async function versionInfo() {
 let updating = false;
 
 /* ---------- Operationen ---------- */
-const PARENT_OPS = new Set(['settings', 'setPin', 'setOpenBooking', 'setMediaRate', 'undo']);
+const PARENT_OPS = new Set(['settings', 'setPin', 'setOpenBooking', 'setMediaRate', 'setWebhook', 'testDevice', 'undo']);
 function apply(op, b) {
   const kid = (id) => S.kids.find((k) => k.id === id);
   switch (op) {
@@ -109,9 +118,12 @@ function apply(op, b) {
     }
     case 'media': {
       const k = kid(b.kid), min = int(b.minutes), cost = Math.ceil(min * S.cfg.mediaRate);
+      const dev = S.devices.find((d) => d.id === b.device) || null;
       if (!k || min <= 0 || min > 600) throw new Error('Ungültige Minutenzahl');
       if (k.pts < cost) throw new Error('Nicht genug Punkte');
-      return book(k, 'spend', `📺 ${min} Min Medienzeit`, -cost);
+      const out = book(k, 'spend', dev ? `${dev.emoji} ${min} Min ${dev.name}` : `📺 ${min} Min Medienzeit`, -cost);
+      if (dev) out.entry.device = dev.id;
+      return { ...out, device: dev, minutes: min, kid: k };
     }
     case 'adjust': {
       const k = kid(b.kid), p = int(b.pts);
@@ -133,8 +145,10 @@ function apply(op, b) {
       const kids = clean(b.kids, (k) => ({ id: str(k.id, 20), name: str(k.name, 40) || 'Kind', emoji: str(k.emoji, 8) || '⭐', color: /^#[0-9a-f]{6}$/i.test(k.color) ? k.color : '#FF7A59', pts: oldKids.get(k.id)?.pts || 0 }));
       const tasks = clean(b.tasks, (t) => ({ id: str(t.id, 20), name: str(t.name) || 'Aufgabe', cat: ['haushalt', 'schule', 'musik', 'sonst'].includes(t.cat) ? t.cat : 'sonst', pts: Math.max(0, Math.min(1000, int(t.pts))) }));
       const rewards = clean(b.rewards, (r) => ({ id: str(r.id, 20), name: str(r.name) || 'Belohnung', emoji: str(r.emoji, 8) || '🎁', cost: Math.max(0, Math.min(100000, int(r.cost))) }));
+      const oldDev = new Map(S.devices.map((d) => [d.id, d]));
+      const devices = Array.isArray(b.devices) ? clean(b.devices, (d) => ({ id: str(d.id, 20), name: str(d.name, 40) || 'Gerät', emoji: str(d.emoji, 8) || '📺', webhook: oldDev.get(d.id)?.webhook || '' })) : S.devices;
       const keep = new Set(kids.map((k) => k.id));
-      S.kids = kids; S.tasks = tasks; S.rewards = rewards;
+      S.kids = kids; S.tasks = tasks; S.rewards = rewards; S.devices = devices;
       S.log = S.log.filter((e) => keep.has(e.kid));
       return {};
     }
@@ -144,6 +158,12 @@ function apply(op, b) {
       if (pin) { S.cfg.pinSalt = uid(); S.cfg.pinHash = hashPin(pin, S.cfg.pinSalt); }
       else { S.cfg.pinSalt = ''; S.cfg.pinHash = ''; }
       return {};
+    }
+    case 'setWebhook': {
+      const d = S.devices.find((x) => x.id === b.id), url = str(b.url, 300);
+      if (!d) throw new Error('Gerät nicht gefunden');
+      if (url && !/^https?:\/\/[^\s]+$/i.test(url)) throw new Error('Bitte eine vollständige http(s)-Adresse eingeben');
+      d.webhook = url; return {};
     }
     case 'setOpenBooking': S.cfg.openBooking = !!b.value; return {};
     case 'setMediaRate': {
@@ -160,6 +180,15 @@ function book(k, kind, label, pts) {
   S.log.unshift(e);
   if (S.log.length > 2000) S.log.length = 2000;
   return { entry: e };
+}
+
+/* ---------- Home Assistant Webhook ---------- */
+async function callWebhook(dev, payload) {
+  let r;
+  try {
+    r = await fetch(dev.webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(8000) });
+  } catch (e) { throw new Error('Home Assistant nicht erreichbar'); }
+  if (!r.ok) throw new Error(`Home Assistant antwortet mit ${r.status}`);
 }
 
 /* ---------- HTTP ---------- */
@@ -193,9 +222,25 @@ const server = http.createServer(async (req, res) => {
       const b = await body(req);
       const needsParent = PARENT_OPS.has(b.op) || !S.cfg.openBooking;
       if (needsParent && !pinOk(pin)) return send(res, 403, { error: 'Eltern-PIN nötig' });
+      if (b.op === 'testDevice') {
+        const d = S.devices.find((x) => x.id === b.id);
+        if (!d || !d.webhook) throw new Error('Kein Webhook hinterlegt');
+        await callWebhook(d, { test: true, minuten: 0, kind: 'Test', kind_id: '', geraet: d.id });
+        return send(res, 200, { ok: true });
+      }
       const out = apply(b.op, b);
+      if (out.device && out.device.webhook) {
+        try {
+          await callWebhook(out.device, { minuten: out.minutes, kind: out.kid.name, kind_id: out.kid.id, geraet: out.device.id });
+          out.unlocked = true;
+        } catch (e) {
+          apply('undo', { id: out.entry.id }); // nicht freigeschaltet → Punkte zurückbuchen
+          throw new Error(`${out.device.name} konnte nicht freigeschaltet werden (${e.message}). Es wurden keine Punkte abgezogen.`);
+        }
+      }
       persist();
-      return send(res, 200, { ok: true, ...out, state: publicState() });
+      const { device, kid: _k, minutes, ...rest } = out;
+      return send(res, 200, { ok: true, ...rest, state: publicState() });
     }
     if (p === '/api/version') return send(res, 200, await versionInfo());
     if (p === '/api/update/check' && req.method === 'POST') {

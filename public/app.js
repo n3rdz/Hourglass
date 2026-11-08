@@ -5,7 +5,7 @@ const COLORS = ['#FF7A59', '#4C9AFF', '#2FB37A', '#A97BE8', '#F2A31B', '#E8578A'
 const EMOJIS = ['🦊', '🐼', '🦁', '🐸', '🐙', '🦄', '🐯', '🐨', '🐶', '🐱', '🚀', '⚽', '🌟', '🦖'];
 const PINKEY = 'punktekonto-pin';
 
-let S = null, online = false, view = 'home', tab = 'earn', pinValid = false, version = null, upd = null;
+let S = null, online = false, view = 'home', tab = 'earn', pinValid = false, version = null, upd = null, mediaDev = null;
 try { view = sessionStorage.getItem('pk-view') || 'home'; tab = sessionStorage.getItem('pk-tab') || 'earn'; } catch (e) {}
 let pin = ''; try { pin = localStorage.getItem(PINKEY) || ''; } catch (e) {}
 
@@ -104,7 +104,10 @@ function kidView(k) {
       + (canBook() ? `<button class="ghost" data-a="adjust">± Eigene Punkte vergeben oder abziehen</button>` : '');
   } else if (tab === 'spend') {
     const maxMin = minutesFor(k.pts);
-    body = lockNote + `<div class="card" style="margin-top:16px;padding-top:14px"><div class="rn" style="font-size:18px">📺 Medienzeit<small>${rateText()} · möglich: ${maxMin} Min</small></div>
+    const devs = S.devices || []; if (!devs.find((d) => d.id === mediaDev)) mediaDev = devs[0] ? devs[0].id : null;
+    const devSel = devs.length > 1 ? `<div class="seg" style="margin-top:12px">${devs.map((d) => `<button class="${d.id === mediaDev ? 'on' : ''}" data-a="dev" data-v="${d.id}">${esc(d.emoji)} ${esc(d.name)}</button>`).join('')}</div>` : '';
+    const curDev = devs.find((d) => d.id === mediaDev);
+    body = lockNote + `<div class="card" style="margin-top:16px;padding-top:14px"><div class="rn" style="font-size:18px">⏱️ Medienzeit<small>${rateText()} · möglich: ${maxMin} Min${curDev && curDev.hasWebhook ? ' · wird automatisch freigeschaltet' : ''}</small></div>${devSel}
       <div class="quick">${[15, 30, 45, 60].map((m) => `<button data-a="media" data-v="${m}" ${Math.ceil(m * rate()) > k.pts ? 'disabled style="opacity:.4"' : ''}>${m} Min</button>`).join('')}</div>
       <button class="add" style="width:100%" data-a="mediaCustom" ${maxMin < 1 ? 'disabled' : ''}>Andere Minutenzahl …</button></div>
       <h3>🎁 Belohnungen</h3>` + '<div class="rewards" style="margin-top:0">' + ([...S.rewards].sort((a, b) => a.cost - b.cost).map((r) => { const ok = k.pts >= r.cost;
@@ -134,7 +137,9 @@ function settings() {
   <section class="card"><h2>Kinder</h2>${S.kids.map((k) => `<div class="row"><button class="eb" data-a="emoji" data-id="${k.id}" title="Symbol wechseln">${esc(k.emoji)}</button><input class="grow" value="${esc(k.name)}" data-c="kids" data-id="${k.id}" data-f="name" aria-label="Name"><button class="sw" style="background:${k.color}" data-a="color" data-id="${k.id}" title="Farbe wechseln"></button><button class="del" data-a="del" data-c="kids" data-id="${k.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addKid">+ Kind</button></section>
   <section class="card"><h2>Aufgaben</h2>${S.tasks.map((t) => `<div class="row wrap"><input class="grow" value="${esc(t.name)}" data-c="tasks" data-id="${t.id}" data-f="name" aria-label="Aufgabe"><select data-c="tasks" data-id="${t.id}" data-f="cat">${catOpts(t.cat)}</select><input class="num" type="number" min="0" inputmode="numeric" value="${t.pts}" data-c="tasks" data-id="${t.id}" data-f="pts" aria-label="Punkte"><button class="del" data-a="del" data-c="tasks" data-id="${t.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addTask">+ Aufgabe</button></section>
   <section class="card"><h2>Belohnungen</h2>${S.rewards.map((r) => `<div class="row"><input class="emo" value="${esc(r.emoji)}" data-c="rewards" data-id="${r.id}" data-f="emoji" aria-label="Symbol"><input class="grow" value="${esc(r.name)}" data-c="rewards" data-id="${r.id}" data-f="name" aria-label="Belohnung"><input class="num" type="number" min="0" inputmode="numeric" value="${r.cost}" data-c="rewards" data-id="${r.id}" data-f="cost" aria-label="Kosten"><button class="del" data-a="del" data-c="rewards" data-id="${r.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addReward">+ Belohnung</button></section>
-  <section class="card"><h2>Medienzeit</h2><div class="row"><span class="grow" style="font-weight:700">Punkte pro Minute Medienzeit</span><input class="num" type="number" min="0.1" step="0.1" inputmode="decimal" value="${rate()}" data-a="mediaRate" aria-label="Punkte pro Minute"></div></section>
+  <section class="card"><h2>Medienzeit</h2><div class="row"><span class="grow" style="font-weight:700">Punkte pro Minute Medienzeit</span><input class="num" type="number" min="0.1" step="0.1" inputmode="decimal" value="${rate()}" data-a="mediaRate" aria-label="Punkte pro Minute"></div>
+   <h3>Geräte</h3>${(S.devices || []).map((d) => `<div class="row wrap"><input class="emo" value="${esc(d.emoji)}" data-c="devices" data-id="${d.id}" data-f="emoji" aria-label="Symbol"><input style="flex:1" value="${esc(d.name)}" data-c="devices" data-id="${d.id}" data-f="name" aria-label="Gerät"><button class="del" data-a="del" data-c="devices" data-id="${d.id}" aria-label="Löschen">✕</button>
+     <div class="btns" style="margin-top:0;flex:1 1 100%;align-items:center"><span class="hint" style="flex:1">${d.hasWebhook ? '🔗 Home Assistant verbunden' : 'Ohne Freischaltung'}</span><button data-a="webhook" data-id="${d.id}">${d.hasWebhook ? 'Webhook ändern' : 'Webhook eintragen'}</button>${d.hasWebhook ? `<button data-a="testDev" data-id="${d.id}">Testen</button>` : ''}</div></div>`).join('')}<button class="add" data-a="addDevice">+ Gerät</button></section>
   <section class="card"><h2>Eltern-PIN</h2><p class="hint">${S.cfg.hasPin ? 'Ein PIN ist gesetzt. Ohne PIN sehen die Kinder nur ihre Punkte.' : 'Noch kein PIN – jeder kann buchen und Einstellungen ändern.'}</p>
    <div class="btns"><button class="pri" data-a="setPin">${S.cfg.hasPin ? 'PIN ändern' : 'PIN festlegen'}</button>${S.cfg.hasPin ? '<button data-a="removePin">PIN entfernen</button>' : ''}</div>
    ${S.cfg.hasPin ? `<label class="toggle">Kinder dürfen selbst Punkte buchen und einlösen<input type="checkbox" data-a="openBooking" ${S.cfg.openBooking ? 'checked' : ''}></label>` : ''}</section>
@@ -152,7 +157,7 @@ function render() {
 let setTimer = null;
 function saveSettings(now) {
   clearTimeout(setTimer);
-  const go = () => op({ op: 'settings', kids: S.kids, tasks: S.tasks, rewards: S.rewards }).catch(() => {});
+  const go = () => op({ op: 'settings', kids: S.kids, tasks: S.tasks, rewards: S.rewards, devices: S.devices }).catch(() => {});
   if (now) return go(); setTimer = setTimeout(go, 600);
 }
 async function loadVersion() { try { version = await api('/api/version'); } catch (e) { version = { git: false }; } if (view === 'settings') render(); }
@@ -197,16 +202,19 @@ document.addEventListener('click', async (ev) => {
         const p = n(document.getElementById('adjP').value); if (!p) return false; const label = document.getElementById('adjR').value.trim();
         const x = await op({ op: 'adjust', kid: cur.id, pts: p, label }).catch(() => null); if (x) { bump(); toast(`${p > 0 ? '+' : ''}${p} · ${x.entry.label}`, x.entry.id); } }); }); break;
     case 'media': case 'mediaCustom': need(() => { if (!cur) return;
-      const doMedia = async (min) => { const x = await op({ op: 'media', kid: cur.id, minutes: min }).catch(() => null); if (x) { bump(); toast(`${min} Min Medienzeit – viel Spaß!`, x.entry.id); } };
+      const dev = (S.devices || []).find((d) => d.id === mediaDev);
+      const doMedia = async (min) => { const x = await op({ op: 'media', kid: cur.id, minutes: min, device: dev ? dev.id : '' }).catch(() => null);
+        if (x) { bump(); toast(x.unlocked ? `${dev.name}: ${min} Min freigeschaltet – viel Spaß!` : `${min} Min ${dev ? dev.name : 'Medienzeit'} – viel Spaß!`, x.entry.id); } };
       if (a === 'media') { const min = n(b.dataset.v), cost = Math.ceil(min * rate());
-        modal(`<h4>📺 ${min} Min Medienzeit einlösen?</h4><p>${esc(cur.name)} hat ${cur.pts} Punkte. Danach bleiben ${cur.pts - cost}.</p>`, `${cost} Punkte einlösen`, () => doMedia(min)); }
-      else modal(`<h4>📺 Medienzeit für ${esc(cur.name)}</h4><p>Möglich: bis zu ${minutesFor(cur.pts)} Min (${rateText()}).</p><label>Minuten</label><input id="medMin" type="number" min="1" inputmode="numeric" value="${Math.min(20, minutesFor(cur.pts))}"><div id="medErr" class="err"></div>`, 'Einlösen', async () => {
+        modal(`<h4>${dev ? esc(dev.emoji) + ' ' + min + ' Min ' + esc(dev.name) : '📺 ' + min + ' Min Medienzeit'} einlösen?</h4>${dev && dev.hasWebhook ? '<p>Wird danach automatisch freigeschaltet.</p>' : ''}<p>${esc(cur.name)} hat ${cur.pts} Punkte. Danach bleiben ${cur.pts - cost}.</p>`, `${cost} Punkte einlösen`, () => doMedia(min)); }
+      else modal(`<h4>${dev ? esc(dev.emoji) + ' ' + esc(dev.name) : '📺 Medienzeit'} für ${esc(cur.name)}</h4><p>Möglich: bis zu ${minutesFor(cur.pts)} Min (${rateText()}).</p><label>Minuten</label><input id="medMin" type="number" min="1" inputmode="numeric" value="${Math.min(20, minutesFor(cur.pts))}"><div id="medErr" class="err"></div>`, 'Einlösen', async () => {
         const min = n(document.getElementById('medMin').value); if (min < 1 || Math.ceil(min * rate()) > cur.pts) { document.getElementById('medErr').textContent = 'So viele Punkte sind nicht da.'; return false; } await doMedia(min); });
     }); break;
     case 'q': document.getElementById('adjP').value = b.dataset.v; break;
     case 'undo-now': toastEl.classList.remove('show'); await op({ op: 'undo', id }).catch(() => {}); bump(); break;
     case 'undo': { const e = S.log.find((x) => x.id === id); if (!e) return; const k = kidById(e.kid);
-      modal(`<h4>Eintrag rückgängig machen?</h4><p>${k ? esc(k.emoji + ' ' + k.name) + ': ' : ''}${esc(e.label)} (${e.pts > 0 ? '+' : ''}${e.pts})</p>`, 'Rückgängig', () => op({ op: 'undo', id }).catch(() => {}), 'danger'); break; }
+      const dv = e.device && (S.devices || []).find((d) => d.id === e.device && d.hasWebhook);
+      modal(`<h4>Eintrag rückgängig machen?</h4><p>${k ? esc(k.emoji + ' ' + k.name) + ': ' : ''}${esc(e.label)} (${e.pts > 0 ? '+' : ''}${e.pts})</p>${dv ? `<p>Die Punkte werden zurückgebucht. Die Freischaltung auf ${esc(dv.name)} bleibt aber bestehen.</p>` : ''}`, 'Rückgängig', () => op({ op: 'undo', id }).catch(() => {}), 'danger'); break; }
     case 'emoji': { const k = kidById(id); k.emoji = EMOJIS[(EMOJIS.indexOf(k.emoji) + 1) % EMOJIS.length]; render(); saveSettings(); break; }
     case 'color': { const k = kidById(id); k.color = COLORS[(COLORS.indexOf(k.color) + 1) % COLORS.length]; render(); saveSettings(); break; }
     case 'addKid': S.kids.push({ id: uid(), name: 'Neues Kind', emoji: EMOJIS[S.kids.length % EMOJIS.length], color: COLORS[S.kids.length % COLORS.length], pts: 0 }); saveSettings(true); break;
@@ -219,6 +227,13 @@ document.addEventListener('click', async (ev) => {
         const v = document.getElementById('np').value.trim(); if (!/^\d{4,12}$/.test(v)) { document.getElementById('npErr').textContent = 'Bitte 4–12 Ziffern.'; return false; }
         await op({ op: 'setPin', newPin: v }).catch(() => null); pin = v; pinValid = true; try { localStorage.setItem(PINKEY, v); } catch (e) {} render(); toast('PIN gespeichert'); }); break;
     case 'removePin': modal('<h4>PIN entfernen?</h4><p>Danach kann jeder buchen und Einstellungen ändern.</p>', 'Entfernen', () => op({ op: 'setPin', newPin: '' }).catch(() => {}), 'danger'); break;
+    case 'dev': mediaDev = b.dataset.v; render(); break;
+    case 'addDevice': S.devices.push({ id: uid(), name: 'Neues Gerät', emoji: '📺' }); saveSettings(true); break;
+    case 'webhook': { const d = S.devices.find((x) => x.id === id); if (!d) return;
+      modal(`<h4>${esc(d.emoji)} ${esc(d.name)}: Webhook</h4><p>Adresse des Home-Assistant-Webhooks, z. B. <code>http://192.168.178.20:8123/api/webhook/…</code>. Leer lassen, um die Verbindung zu entfernen.</p><input id="whUrl" type="url" placeholder="http://…/api/webhook/…" autocomplete="off"><div id="whErr" class="err"></div>`, 'Speichern', async () => {
+        try { const r = await api('/api/op', { op: 'setWebhook', id: d.id, url: document.getElementById('whUrl').value.trim() }); S = r.state; render(); toast('Gespeichert'); }
+        catch (e) { document.getElementById('whErr').textContent = e.message; return false; } }); break; }
+    case 'testDev': { b.disabled = true; try { await api('/api/op', { op: 'testDevice', id }); toast('✅ Home Assistant hat geantwortet'); } catch (e) { toast('❌ ' + e.message); } b.disabled = false; break; }
     case 'checkUpd': checkUpd(); break;
     case 'applyUpd': applyUpd(); break;
   }

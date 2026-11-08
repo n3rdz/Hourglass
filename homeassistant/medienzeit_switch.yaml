@@ -1,0 +1,41 @@
+# Home Assistant Automation: Nintendo Switch per Punktekonto freischalten
+# Einfügen unter: Einstellungen → Automationen → Neue Automation → ⋮ → In YAML bearbeiten
+#
+# Voraussetzungen in der Nintendo-Kindersicherungs-App:
+#   - Tägliches Spielzeit-Limit: 0 Minuten (Switch ist standardmäßig gesperrt)
+#   - "Spiel unterbrechen" (Suspend software) einschalten
+#
+# Webhook-Adresse für die Punkte-App (Einstellungen → Medienzeit → Nintendo Switch → Webhook):
+#   http://<IP-von-Home-Assistant>:8123/api/webhook/punktekonto-switch-HIER-EIGENE-ZUFALLS-ID
+
+alias: Punktekonto – Switch freischalten
+description: Wird von der Punkte-App beim Einlösen von Switch-Zeit aufgerufen
+mode: queued
+triggers:
+  - trigger: webhook
+    webhook_id: punktekonto-switch-HIER-EIGENE-ZUFALLS-ID
+    allowed_methods: [POST]
+    local_only: true   # auf false setzen, falls die App über home.n3rdz.de (Internet) zugreift
+conditions:
+  - condition: template
+    value_template: "{{ trigger.json.minuten | int(0) > 0 }}"   # Testaufrufe (0 Min) ändern nichts
+actions:
+  - variables:
+      limit_entity: number.virtuell_switch_maximale_bildschirmzeit_heute
+      aktuell: "{{ states(limit_entity) | int(0) }}"
+      step: "{{ state_attr(limit_entity, 'step') | int(1) }}"
+      maximum: "{{ state_attr(limit_entity, 'max') | int(360) }}"
+      roh: "{{ aktuell + trigger.json.minuten | int(0) }}"
+      neu: "{{ [((roh + step - 1) // step) * step, maximum] | min }}"
+  - condition: template
+    value_template: "{{ aktuell >= 0 }}"   # -1 = unbegrenzt → nichts zu tun
+  - action: number.set_value
+    target:
+      entity_id: "{{ limit_entity }}"
+    data:
+      value: "{{ neu }}"
+  - action: logbook.log
+    data:
+      name: Punktekonto
+      message: "{{ trigger.json.kind }} hat {{ trigger.json.minuten }} Min Switch-Zeit eingelöst (Limit heute jetzt {{ neu }} Min)"
+      entity_id: "{{ limit_entity }}"

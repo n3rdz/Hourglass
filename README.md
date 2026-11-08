@@ -8,6 +8,14 @@ Mit dieser Familien-App sammeln die Kinder Punkte für Haushalt, Hausaufgaben, I
 - **Updates per Knopfdruck:** Unter *Einstellungen → App-Version & Updates* holt die App die neue Version per `git pull` und startet sich neu
 - Keine npm-Abhängigkeiten. Die Daten liegen in `data/state.json`
 
+## Home Assistant: Medienzeit automatisch freischalten
+
+Für jedes Medienzeit-Gerät (z. B. *Nintendo Switch*) kannst du unter *Einstellungen → Medienzeit* einen Home-Assistant-Webhook hinterlegen. Wenn ein Kind Zeit für dieses Gerät einlöst, ruft die App den Webhook auf, mit `{"minuten": 30, "kind": "Theo", "kind_id": "k1", "geraet": "switch"}`. Ist Home Assistant nicht erreichbar, werden keine Punkte abgezogen. Mit dem Knopf *Testen* schickst du einen Aufruf mit 0 Minuten, der nichts verändert.
+
+Eine fertige Automation für die **Nintendo Switch** (Integration *Nintendo Switch Parental Controls*, ab HA 2025.11) liegt in `homeassistant/medienzeit_switch.yaml`. Sie rechnet die eingelösten Minuten auf das heutige Spielzeit-Limit drauf. Dafür muss in der Nintendo-App das tägliche Limit auf 0 Minuten stehen und *Spiel unterbrechen* eingeschaltet sein.
+
+> Die Webhook-Adresse ist wie ein Schlüssel: Die App zeigt sie nach dem Speichern nicht mehr an, auch nicht den Kindern. Trag in der YAML-Datei eine eigene, zufällige ID ein.
+
 ## Installation (Docker)
 
 ```bash
