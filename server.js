@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
+const net = require('net');
 
 const PORT = parseInt(process.env.PORT || '8742', 10);
 const ROOT = __dirname;
@@ -16,7 +17,8 @@ const BRANCH = process.env.GIT_BRANCH || ''; // leer = aktueller Branch
 /* ---------- Daten ---------- */
 const DEFAULT = {
   v: 1, rev: 0,
-  cfg: { pinHash: '', pinSalt: '', kidEarn: false, kidSpend: true, mediaRate: 1 },
+  cfg: { pinHash: '', pinSalt: '', kidEarn: false, kidSpend: true, mediaRate: 1,
+    printer: { host: '', port: 9100, width: 48, auto: true, qr: true } },
   devices: [
     { id: 'tv', name: 'Fernsehen', emoji: '📺', webhook: '' },
     { id: 'switch', name: 'Nintendo Switch', emoji: '🎮', webhook: '' },
@@ -46,6 +48,7 @@ function load() {
   try { S = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
   catch { S = JSON.parse(JSON.stringify(DEFAULT)); }
   S.cfg = Object.assign({}, DEFAULT.cfg, S.cfg || {});
+  S.cfg.printer = Object.assign({}, DEFAULT.cfg.printer, S.cfg.printer || {});
   if ('openBooking' in S.cfg) { // alte Einstellung: Kinder dürfen weiterhin einlösen, Gutschreiben bleibt Eltern-Sache
     S.cfg.kidSpend = true; S.cfg.kidEarn = false;
     delete S.cfg.openBooking;
@@ -78,7 +81,7 @@ function publicState() {
   return {
     ...rest,
     devices: (devices || []).map(({ webhook, ...d }) => ({ ...d, hasWebhook: !!webhook })), // Webhook-URL bleibt geheim
-    cfg: { hasPin: !!cfg.pinHash, kidEarn: !!cfg.kidEarn, kidSpend: !!cfg.kidSpend, mediaRate: cfg.mediaRate || 1 },
+    cfg: { hasPin: !!cfg.pinHash, kidEarn: !!cfg.kidEarn, kidSpend: !!cfg.kidSpend, mediaRate: cfg.mediaRate || 1, printer: { ...cfg.printer } },
   };
 }
 
@@ -105,7 +108,7 @@ async function versionInfo() {
 let updating = false;
 
 /* ---------- Operationen ---------- */
-const PARENT_OPS = new Set(['settings', 'setPin', 'setKidPerm', 'setMediaRate', 'setWebhook', 'testDevice', 'undo', 'adjust']);
+const PARENT_OPS = new Set(['settings', 'setPin', 'setKidPerm', 'setPrinter', 'testPrint', 'printEntry', 'setMediaRate', 'setWebhook', 'testDevice', 'undo', 'adjust']);
 const KID_PERM = { earn: 'kidEarn', spend: 'kidSpend', media: 'kidSpend' };
 function apply(op, b) {
   const kid = (id) => S.kids.find((k) => k.id === id);
@@ -170,6 +173,14 @@ function apply(op, b) {
       if (url && !/^https?:\/\/[^\s]+$/i.test(url)) throw new Error('Bitte eine vollständige http(s)-Adresse eingeben');
       d.webhook = url; return {};
     }
+    case 'setPrinter': {
+      const host = str(b.host, 100);
+      if (host && !/^[a-z0-9.\-:\[\]]+$/i.test(host)) throw new Error('Ungültige Drucker-Adresse');
+      const port = int(b.port) || 9100;
+      if (port < 1 || port > 65535) throw new Error('Ungültiger Port');
+      S.cfg.printer = { host, port, width: [32, 42, 48].includes(int(b.width)) ? int(b.width) : 48, auto: !!b.auto, qr: !!b.qr };
+      return {};
+    }
     case 'setKidPerm': {
       if (!['kidEarn', 'kidSpend'].includes(b.key)) throw new Error('Unbekannte Einstellung');
       S.cfg[b.key] = !!b.value; return {};
@@ -225,6 +236,85 @@ function webhookError(e, url) {
   return `Home Assistant nicht erreichbar: ${msg}`;
 }
 
+/* ---------- Bondrucker (ESC/POS über TCP, Port 9100) ---------- */
+const CP437 = { 'ä': 0x84, 'ö': 0x94, 'ü': 0x81, 'Ä': 0x8e, 'Ö': 0x99, 'Ü': 0x9a, 'ß': 0xe1, 'é': 0x82, 'è': 0x8a, 'à': 0x85, '€': 0xee, '°': 0xf8, '·': 0xfa, '–': 0x2d, '—': 0x2d, '„': 0x22, '“': 0x22, '”': 0x22, '‚': 0x27, '‘': 0x27, '’': 0x27, '…': 0x2e };
+function enc(text) {
+  const out = [];
+  for (const ch of String(text)) {
+    const c = ch.codePointAt(0);
+    if (c >= 0x20 && c < 0x7f) out.push(c);
+    else if (c === 0x0a) out.push(0x0a);
+    else if (CP437[ch] !== undefined) { out.push(CP437[ch]); if (ch === '…') out.push(0x2e, 0x2e); }
+    // Emojis und andere Zeichen kann der Drucker nicht – werden weggelassen
+  }
+  return Buffer.from(out);
+}
+const plain = (t) => String(t).replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim();
+const TZ = process.env.TZ || 'Europe/Berlin';
+const fmtTime = (t) => new Intl.DateTimeFormat('de-DE', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(t)).replace(',', '');
+function wrap(text, w) {
+  const lines = []; let line = '';
+  for (const word of String(text).split(' ')) {
+    if ((line + ' ' + word).trim().length > w) { if (line) lines.push(line); line = word.slice(0, w); } else line = (line + ' ' + word).trim();
+  }
+  if (line) lines.push(line); return lines.join('\n');
+}
+const kv = (k, v, w) => k + ' '.repeat(Math.max(1, w - k.length - String(v).length)) + v;
+function buildReceipt(r, pr) {
+  const W = pr.width, W2 = Math.floor(W / 2);
+  const ESC = 0x1b, GS = 0x1d, parts = [];
+  const raw = (...b) => parts.push(Buffer.from(b));
+  const txt = (t) => parts.push(enc(t));
+  const center = (on) => raw(ESC, 0x61, on ? 1 : 0), bold = (on) => raw(ESC, 0x45, on ? 1 : 0), big = (on) => raw(GS, 0x21, on ? 0x11 : 0);
+  raw(ESC, 0x40); raw(ESC, 0x74, 0); // Init, Zeichensatz CP437
+  center(true); big(true); bold(true); txt('HOURGLASS\n'); big(false); bold(false);
+  txt('-'.repeat(W) + '\n');
+  if (r.test) { txt('\nTestdruck\n\n'); txt('Umlaute: ÄÖÜ äöü ß\n'); txt(`Breite: ${W} Zeichen\n`); txt(fmtTime(Date.now()) + '\n'); }
+  else {
+    bold(true); txt('GUTSCHEIN\n\n'); bold(false);
+    big(true); bold(true); txt(wrap(plain(r.kid), W2) + '\n'); bold(false);
+    txt(wrap(plain(r.what), W2) + '\n'); big(false);
+    txt('\n' + '-'.repeat(W) + '\n'); center(false);
+    txt(kv('Eingelöst:', fmtTime(r.t), W) + '\n');
+    txt(kv('Punkte:', String(r.pts), W) + '\n');
+    txt(kv('Restpunkte:', String(r.rest), W) + '\n');
+    txt(kv('Nr.:', r.nr, W) + '\n');
+    center(true);
+    if (pr.qr) {
+      const data = enc(`HOURGLASS|${r.nr}|${plain(r.kid)}|${plain(r.what)}|${fmtTime(r.t)}`);
+      const len = data.length + 3;
+      txt('\n');
+      raw(GS, 0x28, 0x6b, 4, 0, 0x31, 0x41, 0x32, 0);          // Modell 2
+      raw(GS, 0x28, 0x6b, 3, 0, 0x31, 0x43, W >= 42 ? 7 : 5);   // Modulgröße
+      raw(GS, 0x28, 0x6b, 3, 0, 0x31, 0x45, 0x31);             // Fehlerkorrektur M
+      raw(GS, 0x28, 0x6b, len & 0xff, len >> 8, 0x31, 0x50, 0x30); parts.push(data);
+      raw(GS, 0x28, 0x6b, 3, 0, 0x31, 0x51, 0x30);             // drucken
+      txt('\n');
+    }
+    txt('\nViel Spaß!\n');
+  }
+  txt('\n\n\n'); raw(GS, 0x56, 0x42, 0); // vorschieben & schneiden
+  return Buffer.concat(parts);
+}
+function sendToPrinter(buf) {
+  const pr = S.cfg.printer;
+  if (!pr.host) return Promise.reject(new Error('Kein Drucker eingerichtet'));
+  return new Promise((resolve, reject) => {
+    const sock = net.createConnection({ host: pr.host, port: pr.port });
+    const fail = (msg) => { sock.destroy(); reject(new Error(msg)); };
+    sock.setTimeout(5000, () => fail('Drucker antwortet nicht (Zeitüberschreitung)'));
+    sock.on('error', (e) => fail(e.code === 'ECONNREFUSED' ? 'Verbindung abgelehnt – stimmt der Port (meist 9100)?' : e.code === 'EHOSTUNREACH' || e.code === 'ENETUNREACH' ? 'Drucker im Netzwerk nicht erreichbar' : `Druckerfehler: ${e.code || e.message}`));
+    sock.on('connect', () => sock.end(buf));
+    sock.on('close', (hadErr) => { if (!hadErr) resolve(); });
+  });
+}
+function receiptFor(e) {
+  const k = S.kids.find((x) => x.id === e.kid);
+  const id = String(e.id).toUpperCase();
+  return { kid: k ? k.name : '?', what: e.label, t: e.t, pts: e.pts, rest: k ? k.pts : '?', nr: `${id.slice(0, 4)}-${id.slice(4, 8)}` };
+}
+const printEntry = (e) => sendToPrinter(buildReceipt(receiptFor(e), S.cfg.printer));
+
 /* ---------- HTTP ---------- */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 function send(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
@@ -256,6 +346,16 @@ const server = http.createServer(async (req, res) => {
       const b = await body(req);
       const needsParent = PARENT_OPS.has(b.op) || !S.cfg[KID_PERM[b.op]];
       if (needsParent && !pinOk(pin)) return send(res, 403, { error: 'Eltern-PIN nötig' });
+      if (b.op === 'testPrint') {
+        await sendToPrinter(buildReceipt({ test: true }, S.cfg.printer));
+        return send(res, 200, { ok: true });
+      }
+      if (b.op === 'printEntry') {
+        const e = S.log.find((x) => x.id === b.id);
+        if (!e) throw new Error('Eintrag nicht gefunden');
+        await printEntry(e);
+        return send(res, 200, { ok: true });
+      }
       if (b.op === 'testDevice') {
         const d = S.devices.find((x) => x.id === b.id);
         if (!d || !d.webhook) throw new Error('Kein Webhook hinterlegt');
@@ -273,6 +373,10 @@ const server = http.createServer(async (req, res) => {
         }
       }
       persist();
+      if (out.entry && out.entry.kind === 'spend' && S.cfg.printer.host && S.cfg.printer.auto) {
+        try { await printEntry(out.entry); out.printed = true; }
+        catch (e) { out.printError = e.message; } // Einlösung bleibt gültig, nur der Bon fehlt
+      }
       const { device, kid: _k, minutes, ...rest } = out;
       return send(res, 200, { ok: true, ...rest, state: publicState() });
     }

@@ -16,6 +16,10 @@ Eine fertige Automation für die **Nintendo Switch** (Integration *Nintendo Swit
 
 > Die Webhook-Adresse ist wie ein Schlüssel: Die App zeigt sie nach dem Speichern nicht mehr an, auch nicht den Kindern. Trag in der YAML-Datei eine eigene, zufällige ID ein.
 
+## Bondrucker
+
+Unter *Einstellungen → Bondrucker* trägst du die IP eines Netzwerk-Bondruckers ein. Er muss **ESC/POS** über TCP verstehen, Port meist **9100**. Das können zum Beispiel die Epson TM-Serie und viele 58/80-mm-Drucker mit LAN-Anschluss. Bei jeder Einlösung druckt Hourglass dann einen Gutschein-Bon mit Kind, Einlösung, Uhrzeit, Restpunkten, Gutschein-Nummer und optional einem QR-Code. Aus dem Verlauf lässt sich jeder Bon mit 🖨️ nachdrucken. Kann der Drucker nicht drucken, bleibt die Einlösung trotzdem gültig.
+
 ## Installation auf UGREEN NAS (UGOS Pro)
 
 Dafür brauchst du weder SSH noch Git auf dem NAS.

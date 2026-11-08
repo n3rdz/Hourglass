@@ -76,6 +76,7 @@ function askPin(after) {
 function lock() { pin = ''; pinValid = false; try { localStorage.removeItem(PINKEY); } catch (e) {} if (view === 'settings') view = 'home'; render(); toast('Gesperrt – Kinder-Ansicht'); }
 
 /* ---------- UI-Helfer ---------- */
+const printNote = (x) => x.printed ? ' 🖨️ Bon kommt' : x.printError ? ` (Bon: ${x.printError})` : '';
 let tt; function toast(txt, undoId) {
   clearTimeout(tt); toastEl.innerHTML = `<span>${esc(txt)}</span>` + (undoId && isParent() ? `<button data-a="undo-now" data-id="${undoId}">Rückgängig</button>` : '');
   toastEl.classList.add('show'); tt = setTimeout(() => toastEl.classList.remove('show'), 5000);
@@ -94,7 +95,7 @@ function nextReward(k) { return S.rewards.filter((r) => r.cost > k.pts).sort((a,
 function logList(list, showKid) {
   if (!list.length) return '<p class="empty">Noch nichts passiert.</p>';
   const verb = (e) => e.kind === 'earn' ? 'verdient' : e.kind === 'spend' ? 'eingelöst' : e.pts > 0 ? 'Bonus' : 'Abzug';
-  return '<ul class="log">' + list.map((e) => { const k = kidById(e.kid); return `<li>${k ? `<span class="who" style="--c:${k.color}">${esc(k.emoji)} ${esc(k.name)}</span>` : ''}<span class="ll">${esc(e.label)}<small>${verb(e)} · ${when(e.t)}</small></span><b class="${e.pts >= 0 ? 'plus' : 'minus'}">${e.pts > 0 ? '+' : ''}${e.pts}</b>${isParent() ? `<button class="x" data-a="undo" data-id="${e.id}" title="Rückgängig" aria-label="Rückgängig">↺</button>` : ''}</li>`; }).join('') + '</ul>';
+  return '<ul class="log">' + list.map((e) => { const k = kidById(e.kid); return `<li>${k ? `<span class="who" style="--c:${k.color}">${esc(k.emoji)} ${esc(k.name)}</span>` : ''}<span class="ll">${esc(e.label)}<small>${verb(e)} · ${when(e.t)}</small></span><b class="${e.pts >= 0 ? 'plus' : 'minus'}">${e.pts > 0 ? '+' : ''}${e.pts}</b>${isParent() && e.kind === 'spend' && S.cfg.printer && S.cfg.printer.host ? `<button class="x" data-a="print" data-id="${e.id}" title="Bon drucken" aria-label="Bon drucken">🖨️</button>` : ''}${isParent() ? `<button class="x" data-a="undo" data-id="${e.id}" title="Rückgängig" aria-label="Rückgängig">↺</button>` : ''}</li>`; }).join('') + '</ul>';
 }
 const themeBtn = () => `<button class="icon" data-a="theme" aria-label="Darstellung: ${THEMES[theme].n}" title="Darstellung: ${THEMES[theme].n}">${THEMES[theme].i}</button>`;
 function topRight() {
@@ -217,6 +218,22 @@ async function copyText(t, btn) {
   if (btn) { const o = btn.textContent; btn.textContent = ok ? '✓ Kopiert' : 'Bitte markieren'; setTimeout(() => { btn.textContent = o; }, 1800); }
 }
 
+function printerCard() {
+  const pr = S.cfg.printer || {};
+  return `<section class="card"><h2>🖨️ Bondrucker</h2>
+   <p class="hint">Netzwerk-Bondrucker mit ESC/POS (z. B. Epson TM-Serie oder viele 58/80-mm-Drucker mit LAN). Bei jeder Einlösung kommt ein Gutschein-Bon heraus.</p>
+   <div class="row"><input class="grow" data-p="host" value="${esc(pr.host || '')}" placeholder="IP-Adresse, z. B. 192.168.10.50" aria-label="Drucker-IP"><input class="num" style="width:86px" data-p="port" type="number" inputmode="numeric" value="${pr.port || 9100}" aria-label="Port"></div>
+   <div class="row"><span class="grow" style="font-weight:700">Papierbreite</span><select data-p="width">${[[48, '80 mm (48 Zeichen)'], [42, '80 mm (42 Zeichen)'], [32, '58 mm (32 Zeichen)']].map(([v, l]) => `<option value="${v}" ${pr.width === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+   <label class="toggle">Bei jeder Einlösung automatisch drucken<input type="checkbox" data-p="auto" ${pr.auto ? 'checked' : ''}></label>
+   <label class="toggle">QR-Code auf den Bon drucken<input type="checkbox" data-p="qr" ${pr.qr ? 'checked' : ''}></label>
+   <div class="btns"><button data-a="testPrint" ${pr.host ? '' : 'disabled'}>Testdruck</button></div>
+   <p class="hint" style="font-size:12px">Port ist fast immer <b>9100</b>. Einzelne Einlösungen lassen sich im Verlauf mit 🖨️ nachdrucken.</p></section>`;
+}
+function savePrinter() {
+  const g = (k) => root.querySelector(`[data-p="${k}"]`);
+  return op({ op: 'setPrinter', host: g('host').value.trim(), port: n(g('port').value), width: n(g('width').value), auto: g('auto').checked, qr: g('qr').checked });
+}
+
 function updateCard() {
   const v = version;
   let html = '<section class="card"><h2>App-Version & Updates</h2>';
@@ -242,6 +259,7 @@ function settings() {
    <h3>Geräte</h3>${(S.devices || []).map((d) => `<div class="row wrap"><input class="emo" value="${esc(d.emoji)}" data-c="devices" data-id="${d.id}" data-f="emoji" aria-label="Symbol"><input style="flex:1" value="${esc(d.name)}" data-c="devices" data-id="${d.id}" data-f="name" aria-label="Gerät"><button class="del" data-a="del" data-c="devices" data-id="${d.id}" aria-label="Löschen">✕</button>
      <div class="btns" style="margin-top:0;flex:1 1 100%;align-items:center"><span class="hint" style="flex:1">${d.hasWebhook ? '🔗 Home Assistant verbunden' : 'Ohne Freischaltung'}</span><button data-a="webhook" data-id="${d.id}">${d.hasWebhook ? 'Webhook ändern' : 'Webhook eintragen'}</button>${d.hasWebhook ? `<button data-a="testDev" data-id="${d.id}">Testen</button>` : ''}</div></div>`).join('')}<button class="add" data-a="addDevice">+ Gerät</button></section>
   ${haGuide()}
+  ${printerCard()}
   <section class="card"><h2>Eltern-PIN</h2><p class="hint">${S.cfg.hasPin ? 'Ein PIN ist gesetzt. Was die Kinder ohne PIN dürfen, stellst du hier ein:' : 'Noch kein PIN – jeder kann buchen und Einstellungen ändern.'}</p>
    <div class="btns"><button class="pri" data-a="setPin">${S.cfg.hasPin ? 'PIN ändern' : 'PIN festlegen'}</button>${S.cfg.hasPin ? '<button data-a="removePin">PIN entfernen</button>' : ''}</div>
    ${S.cfg.hasPin ? `<label class="toggle">Kinder dürfen selbst einlösen (Medienzeit & Belohnungen)<input type="checkbox" data-a="kidPerm" data-k="kidSpend" ${S.cfg.kidSpend ? 'checked' : ''}></label>
@@ -299,7 +317,7 @@ document.addEventListener('click', async (ev) => {
     case 'lock': lock(); break;
     case 'earn': need(canEarn(), async () => { const t = S.tasks.find((x) => x.id === id); if (!t || !cur) return; const r = await op({ op: 'earn', kid: cur.id, task: t.id }); bump(); toast(`+${t.pts} für „${t.name}“`, r.entry.id); }); break;
     case 'spend': need(canSpend(), () => { const r = S.rewards.find((x) => x.id === id); if (!r || !cur) return;
-      modal(`<h4>${esc(r.emoji)} ${esc(r.name)} einlösen?</h4><p>${esc(cur.name)} hat ${cur.pts} Punkte. Danach bleiben ${cur.pts - r.cost}.</p>`, `${r.cost} Punkte einlösen`, async () => { const x = await op({ op: 'spend', kid: cur.id, reward: r.id }).catch(() => null); if (x) { bump(); toast(`${r.name} eingelöst – viel Spaß!`, x.entry.id); } }); }); break;
+      modal(`<h4>${esc(r.emoji)} ${esc(r.name)} einlösen?</h4><p>${esc(cur.name)} hat ${cur.pts} Punkte. Danach bleiben ${cur.pts - r.cost}.</p>`, `${r.cost} Punkte einlösen`, async () => { const x = await op({ op: 'spend', kid: cur.id, reward: r.id }).catch(() => null); if (x) { bump(); toast(`${r.name} eingelöst – viel Spaß!` + printNote(x), x.entry.id); } }); }); break;
     case 'adjust': need(isParent(), () => { if (!cur) return;
       modal(`<h4>Punkte für ${esc(cur.name)}</h4><label>Punkte (minus = abziehen)</label><input id="adjP" type="number" inputmode="numeric" value="5"><div class="quick">${[-10, -5, 5, 10, 20].map((v) => `<button data-a="q" data-v="${v}">${v > 0 ? '+' : ''}${v}</button>`).join('')}</div><label>Grund</label><input id="adjR" placeholder="z. B. Oma beim Einkaufen geholfen">`, 'Buchen', async () => {
         const p = n(document.getElementById('adjP').value); if (!p) return false; const label = document.getElementById('adjR').value.trim();
@@ -307,7 +325,7 @@ document.addEventListener('click', async (ev) => {
     case 'media': case 'mediaCustom': need(canSpend(), () => { if (!cur) return;
       const dev = (S.devices || []).find((d) => d.id === mediaDev);
       const doMedia = async (min) => { const x = await op({ op: 'media', kid: cur.id, minutes: min, device: dev ? dev.id : '' }).catch(() => null);
-        if (x) { bump(); toast(x.unlocked ? `${dev.name}: ${min} Min freigeschaltet – viel Spaß!` : `${min} Min ${dev ? dev.name : 'Medienzeit'} – viel Spaß!`, x.entry.id); } };
+        if (x) { bump(); toast((x.unlocked ? `${dev.name}: ${min} Min freigeschaltet – viel Spaß!` : `${min} Min ${dev ? dev.name : 'Medienzeit'} – viel Spaß!`) + printNote(x), x.entry.id); } };
       if (a === 'media') { const min = n(b.dataset.v), cost = Math.ceil(min * rate());
         modal(`<h4>${dev ? esc(dev.emoji) + ' ' + min + ' Min ' + esc(dev.name) : '📺 ' + min + ' Min Medienzeit'} einlösen?</h4>${dev && dev.hasWebhook ? '<p>Wird danach automatisch freigeschaltet.</p>' : ''}<p>${esc(cur.name)} hat ${cur.pts} Punkte. Danach bleiben ${cur.pts - cost}.</p>`, `${cost} Punkte einlösen`, () => doMedia(min)); }
       else modal(`<h4>${dev ? esc(dev.emoji) + ' ' + esc(dev.name) : '📺 Medienzeit'} für ${esc(cur.name)}</h4><p>Möglich: bis zu ${minutesFor(cur.pts)} Min (${rateText()}).</p><label>Minuten</label><input id="medMin" type="number" min="1" inputmode="numeric" value="${Math.min(20, minutesFor(cur.pts))}"><div id="medErr" class="err"></div>`, 'Einlösen', async () => {
@@ -342,6 +360,8 @@ document.addEventListener('click', async (ev) => {
       try { const r = await api('/api/op', { op: 'setWebhook', id: devId, url: haUrl(haValues()) }); S = r.state; render(); toast('Webhook übernommen – jetzt „Testen“ antippen'); }
       catch (e) { toast(e.message); } break; }
     case 'theme': { const order = ['auto', 'light', 'dark']; setTheme(order[(order.indexOf(theme) + 1) % 3]); render(); toast(`${THEMES[theme].i} Darstellung: ${THEMES[theme].n}`); break; }
+    case 'testPrint': { b.disabled = true; try { await api('/api/op', { op: 'testPrint' }); toast('🖨️ Testdruck gesendet'); } catch (e) { toast('❌ ' + e.message); } b.disabled = false; break; }
+    case 'print': { try { await api('/api/op', { op: 'printEntry', id }); toast('🖨️ Bon wird gedruckt'); } catch (e) { toast('❌ ' + e.message); } break; }
     case 'checkUpd': checkUpd(); break;
     case 'applyUpd': applyUpd(); break;
   }
@@ -355,6 +375,7 @@ document.addEventListener('input', (ev) => {
 document.addEventListener('change', (ev) => {
   const el = ev.target; if (!S) return;
   if (el.dataset.a === 'mediaRate') { const r = Number(String(el.value).replace(',', '.')); if (r > 0) op({ op: 'setMediaRate', value: r }).catch(() => {}); return; }
+  if (el.dataset.p) { savePrinter().then(() => {}).catch(() => {}); return; }
   if (el.dataset.a === 'kidPerm') { op({ op: 'setKidPerm', key: el.dataset.k, value: el.checked }).catch(() => {}); return; }
   if (!el.dataset.c) return; const it = S[el.dataset.c].find((x) => x.id === el.dataset.id); if (!it) return;
   const f = el.dataset.f; it[f] = (f === 'pts' || f === 'cost') ? Math.max(0, n(el.value)) : (el.value.trim() || it[f]); saveSettings();
