@@ -19,7 +19,8 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const kidById = (id) => S.kids.find((k) => k.id === id);
 const n = (v) => { v = parseInt(v, 10); return isFinite(v) ? v : 0; };
 const isParent = () => !S.cfg.hasPin || pinValid;
-const canBook = () => isParent() || S.cfg.openBooking;
+const canEarn = () => isParent() || S.cfg.kidEarn;
+const canSpend = () => isParent() || S.cfg.kidSpend;
 const rate = () => S.cfg.mediaRate || 1;
 const minutesFor = (pts) => Math.floor(pts / rate());
 const rateText = () => rate() === 1 ? '1 Punkt = 1 Minute' : `${String(rate()).replace('.', ',')} Punkte = 1 Minute`;
@@ -97,17 +98,17 @@ function home() {
 }
 function kidView(k) {
   const tabs = [['earn', '➕ Verdienen'], ['spend', '🎁 Einlösen'], ['log', '📜 Verlauf']]; let body = '';
-  const lockNote = canBook() ? '' : '<p class="hint" style="margin-top:14px">🔒 Zum Buchen bitte Mama oder Papa fragen.</p>';
+  const lockNote = (ok, txt) => ok ? '' : `<p class="hint" style="margin-top:14px">🔒 ${txt}</p>`;
   if (tab === 'earn') {
-    body = lockNote + Object.entries(CATS).map(([c, m]) => { const ts = S.tasks.filter((t) => t.cat === c); if (!ts.length) return '';
+    body = lockNote(canEarn(), 'Punkte schreiben Mama oder Papa gut. Sag Bescheid, wenn du etwas erledigt hast!') + Object.entries(CATS).map(([c, m]) => { const ts = S.tasks.filter((t) => t.cat === c); if (!ts.length) return '';
       return `<h3>${m.e} ${m.n}</h3><div class="tasks">${ts.map((t) => `<button class="task" data-a="earn" data-id="${t.id}"><span>${esc(t.name)}</span><b>+${t.pts}</b></button>`).join('')}</div>`; }).join('')
-      + (canBook() ? `<button class="ghost" data-a="adjust">± Eigene Punkte vergeben oder abziehen</button>` : '');
+      + (isParent() ? `<button class="ghost" data-a="adjust">± Eigene Punkte vergeben oder abziehen</button>` : '');
   } else if (tab === 'spend') {
     const maxMin = minutesFor(k.pts);
     const devs = S.devices || []; if (!devs.find((d) => d.id === mediaDev)) mediaDev = devs[0] ? devs[0].id : null;
     const devSel = devs.length > 1 ? `<div class="seg" style="margin-top:12px">${devs.map((d) => `<button class="${d.id === mediaDev ? 'on' : ''}" data-a="dev" data-v="${d.id}">${esc(d.emoji)} ${esc(d.name)}</button>`).join('')}</div>` : '';
     const curDev = devs.find((d) => d.id === mediaDev);
-    body = lockNote + `<div class="card" style="margin-top:16px;padding-top:14px"><div class="rn" style="font-size:18px">⏱️ Medienzeit<small>${rateText()} · möglich: ${maxMin} Min${curDev && curDev.hasWebhook ? ' · wird automatisch freigeschaltet' : ''}</small></div>${devSel}
+    body = lockNote(canSpend(), 'Zum Einlösen bitte Mama oder Papa fragen.') + `<div class="card" style="margin-top:16px;padding-top:14px"><div class="rn" style="font-size:18px">⏱️ Medienzeit<small>${rateText()} · möglich: ${maxMin} Min${curDev && curDev.hasWebhook ? ' · wird automatisch freigeschaltet' : ''}</small></div>${devSel}
       <div class="quick">${[15, 30, 45, 60].map((m) => `<button data-a="media" data-v="${m}" ${Math.ceil(m * rate()) > k.pts ? 'disabled style="opacity:.4"' : ''}>${m} Min</button>`).join('')}</div>
       <button class="add" style="width:100%" data-a="mediaCustom" ${maxMin < 1 ? 'disabled' : ''}>Andere Minutenzahl …</button></div>
       <h3>🎁 Belohnungen</h3>` + '<div class="rewards" style="margin-top:0">' + ([...S.rewards].sort((a, b) => a.cost - b.cost).map((r) => { const ok = k.pts >= r.cost;
@@ -228,9 +229,10 @@ function settings() {
    <h3>Geräte</h3>${(S.devices || []).map((d) => `<div class="row wrap"><input class="emo" value="${esc(d.emoji)}" data-c="devices" data-id="${d.id}" data-f="emoji" aria-label="Symbol"><input style="flex:1" value="${esc(d.name)}" data-c="devices" data-id="${d.id}" data-f="name" aria-label="Gerät"><button class="del" data-a="del" data-c="devices" data-id="${d.id}" aria-label="Löschen">✕</button>
      <div class="btns" style="margin-top:0;flex:1 1 100%;align-items:center"><span class="hint" style="flex:1">${d.hasWebhook ? '🔗 Home Assistant verbunden' : 'Ohne Freischaltung'}</span><button data-a="webhook" data-id="${d.id}">${d.hasWebhook ? 'Webhook ändern' : 'Webhook eintragen'}</button>${d.hasWebhook ? `<button data-a="testDev" data-id="${d.id}">Testen</button>` : ''}</div></div>`).join('')}<button class="add" data-a="addDevice">+ Gerät</button></section>
   ${haGuide()}
-  <section class="card"><h2>Eltern-PIN</h2><p class="hint">${S.cfg.hasPin ? 'Ein PIN ist gesetzt. Ohne PIN sehen die Kinder nur ihre Punkte.' : 'Noch kein PIN – jeder kann buchen und Einstellungen ändern.'}</p>
+  <section class="card"><h2>Eltern-PIN</h2><p class="hint">${S.cfg.hasPin ? 'Ein PIN ist gesetzt. Was die Kinder ohne PIN dürfen, stellst du hier ein:' : 'Noch kein PIN – jeder kann buchen und Einstellungen ändern.'}</p>
    <div class="btns"><button class="pri" data-a="setPin">${S.cfg.hasPin ? 'PIN ändern' : 'PIN festlegen'}</button>${S.cfg.hasPin ? '<button data-a="removePin">PIN entfernen</button>' : ''}</div>
-   ${S.cfg.hasPin ? `<label class="toggle">Kinder dürfen selbst Punkte buchen und einlösen<input type="checkbox" data-a="openBooking" ${S.cfg.openBooking ? 'checked' : ''}></label>` : ''}</section>
+   ${S.cfg.hasPin ? `<label class="toggle">Kinder dürfen selbst einlösen (Medienzeit & Belohnungen)<input type="checkbox" data-a="kidPerm" data-k="kidSpend" ${S.cfg.kidSpend ? 'checked' : ''}></label>
+   <label class="toggle">Kinder dürfen sich selbst Punkte gutschreiben<input type="checkbox" data-a="kidPerm" data-k="kidEarn" ${S.cfg.kidEarn ? 'checked' : ''}></label>` : ''}</section>
   ${updateCard()}`;
 }
 function render() {
@@ -276,20 +278,20 @@ document.addEventListener('click', async (ev) => {
   if (m) { if (m.dataset.m === 'ok') runOk(); else if (m.dataset.m === 'cancel' || ev.target === m) closeModal(); return; }
   const b = ev.target.closest('[data-a]'); if (!b || !S) return; const a = b.dataset.a, id = b.dataset.id;
   const cur = view.startsWith('kid:') ? kidById(view.slice(4)) : null;
-  const need = (fn) => (canBook() ? fn() : askPin(fn));
+  const need = (ok, fn) => (ok ? fn() : askPin(fn));
   switch (a) {
     case 'go': view = b.dataset.v; if (view.startsWith('kid:')) tab = 'earn'; if (view === 'settings') { upd = null; loadVersion(); } render(); scrollTo(0, 0); break;
     case 'tab': tab = b.dataset.v; render(); break;
     case 'unlock': askPin(); break;
     case 'lock': lock(); break;
-    case 'earn': need(async () => { const t = S.tasks.find((x) => x.id === id); if (!t || !cur) return; const r = await op({ op: 'earn', kid: cur.id, task: t.id }); bump(); toast(`+${t.pts} für „${t.name}“`, r.entry.id); }); break;
-    case 'spend': need(() => { const r = S.rewards.find((x) => x.id === id); if (!r || !cur) return;
+    case 'earn': need(canEarn(), async () => { const t = S.tasks.find((x) => x.id === id); if (!t || !cur) return; const r = await op({ op: 'earn', kid: cur.id, task: t.id }); bump(); toast(`+${t.pts} für „${t.name}“`, r.entry.id); }); break;
+    case 'spend': need(canSpend(), () => { const r = S.rewards.find((x) => x.id === id); if (!r || !cur) return;
       modal(`<h4>${esc(r.emoji)} ${esc(r.name)} einlösen?</h4><p>${esc(cur.name)} hat ${cur.pts} Punkte. Danach bleiben ${cur.pts - r.cost}.</p>`, `${r.cost} Punkte einlösen`, async () => { const x = await op({ op: 'spend', kid: cur.id, reward: r.id }).catch(() => null); if (x) { bump(); toast(`${r.name} eingelöst – viel Spaß!`, x.entry.id); } }); }); break;
-    case 'adjust': need(() => { if (!cur) return;
+    case 'adjust': need(isParent(), () => { if (!cur) return;
       modal(`<h4>Punkte für ${esc(cur.name)}</h4><label>Punkte (minus = abziehen)</label><input id="adjP" type="number" inputmode="numeric" value="5"><div class="quick">${[-10, -5, 5, 10, 20].map((v) => `<button data-a="q" data-v="${v}">${v > 0 ? '+' : ''}${v}</button>`).join('')}</div><label>Grund</label><input id="adjR" placeholder="z. B. Oma beim Einkaufen geholfen">`, 'Buchen', async () => {
         const p = n(document.getElementById('adjP').value); if (!p) return false; const label = document.getElementById('adjR').value.trim();
         const x = await op({ op: 'adjust', kid: cur.id, pts: p, label }).catch(() => null); if (x) { bump(); toast(`${p > 0 ? '+' : ''}${p} · ${x.entry.label}`, x.entry.id); } }); }); break;
-    case 'media': case 'mediaCustom': need(() => { if (!cur) return;
+    case 'media': case 'mediaCustom': need(canSpend(), () => { if (!cur) return;
       const dev = (S.devices || []).find((d) => d.id === mediaDev);
       const doMedia = async (min) => { const x = await op({ op: 'media', kid: cur.id, minutes: min, device: dev ? dev.id : '' }).catch(() => null);
         if (x) { bump(); toast(x.unlocked ? `${dev.name}: ${min} Min freigeschaltet – viel Spaß!` : `${min} Min ${dev ? dev.name : 'Medienzeit'} – viel Spaß!`, x.entry.id); } };
@@ -339,7 +341,7 @@ document.addEventListener('input', (ev) => {
 document.addEventListener('change', (ev) => {
   const el = ev.target; if (!S) return;
   if (el.dataset.a === 'mediaRate') { const r = Number(String(el.value).replace(',', '.')); if (r > 0) op({ op: 'setMediaRate', value: r }).catch(() => {}); return; }
-  if (el.dataset.a === 'openBooking') { op({ op: 'setOpenBooking', value: el.checked }).catch(() => {}); return; }
+  if (el.dataset.a === 'kidPerm') { op({ op: 'setKidPerm', key: el.dataset.k, value: el.checked }).catch(() => {}); return; }
   if (!el.dataset.c) return; const it = S[el.dataset.c].find((x) => x.id === el.dataset.id); if (!it) return;
   const f = el.dataset.f; it[f] = (f === 'pts' || f === 'cost') ? Math.max(0, n(el.value)) : (el.value.trim() || it[f]); saveSettings();
 });

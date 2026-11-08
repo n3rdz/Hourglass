@@ -16,7 +16,7 @@ const BRANCH = process.env.GIT_BRANCH || ''; // leer = aktueller Branch
 /* ---------- Daten ---------- */
 const DEFAULT = {
   v: 1, rev: 0,
-  cfg: { pinHash: '', pinSalt: '', openBooking: false, mediaRate: 1 },
+  cfg: { pinHash: '', pinSalt: '', kidEarn: false, kidSpend: true, mediaRate: 1 },
   devices: [
     { id: 'tv', name: 'Fernsehen', emoji: '📺', webhook: '' },
     { id: 'switch', name: 'Nintendo Switch', emoji: '🎮', webhook: '' },
@@ -46,6 +46,10 @@ function load() {
   try { S = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
   catch { S = JSON.parse(JSON.stringify(DEFAULT)); }
   S.cfg = Object.assign({}, DEFAULT.cfg, S.cfg || {});
+  if ('openBooking' in S.cfg) { // alte Einstellung: Kinder dürfen weiterhin einlösen, Gutschreiben bleibt Eltern-Sache
+    S.cfg.kidSpend = true; S.cfg.kidEarn = false;
+    delete S.cfg.openBooking;
+  }
   for (const k of ['kids', 'tasks', 'rewards', 'log']) if (!Array.isArray(S[k])) S[k] = [];
   if (!Array.isArray(S.devices)) S.devices = JSON.parse(JSON.stringify(DEFAULT.devices));
 }
@@ -74,7 +78,7 @@ function publicState() {
   return {
     ...rest,
     devices: (devices || []).map(({ webhook, ...d }) => ({ ...d, hasWebhook: !!webhook })), // Webhook-URL bleibt geheim
-    cfg: { hasPin: !!cfg.pinHash, openBooking: !!cfg.openBooking, mediaRate: cfg.mediaRate || 1 },
+    cfg: { hasPin: !!cfg.pinHash, kidEarn: !!cfg.kidEarn, kidSpend: !!cfg.kidSpend, mediaRate: cfg.mediaRate || 1 },
   };
 }
 
@@ -101,7 +105,8 @@ async function versionInfo() {
 let updating = false;
 
 /* ---------- Operationen ---------- */
-const PARENT_OPS = new Set(['settings', 'setPin', 'setOpenBooking', 'setMediaRate', 'setWebhook', 'testDevice', 'undo']);
+const PARENT_OPS = new Set(['settings', 'setPin', 'setKidPerm', 'setMediaRate', 'setWebhook', 'testDevice', 'undo', 'adjust']);
+const KID_PERM = { earn: 'kidEarn', spend: 'kidSpend', media: 'kidSpend' };
 function apply(op, b) {
   const kid = (id) => S.kids.find((k) => k.id === id);
   switch (op) {
@@ -165,7 +170,10 @@ function apply(op, b) {
       if (url && !/^https?:\/\/[^\s]+$/i.test(url)) throw new Error('Bitte eine vollständige http(s)-Adresse eingeben');
       d.webhook = url; return {};
     }
-    case 'setOpenBooking': S.cfg.openBooking = !!b.value; return {};
+    case 'setKidPerm': {
+      if (!['kidEarn', 'kidSpend'].includes(b.key)) throw new Error('Unbekannte Einstellung');
+      S.cfg[b.key] = !!b.value; return {};
+    }
     case 'setMediaRate': {
       const r = Number(b.value);
       if (!(r > 0 && r <= 100)) throw new Error('Ungültiger Wert');
@@ -246,7 +254,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/op' && req.method === 'POST') {
       const b = await body(req);
-      const needsParent = PARENT_OPS.has(b.op) || !S.cfg.openBooking;
+      const needsParent = PARENT_OPS.has(b.op) || !S.cfg[KID_PERM[b.op]];
       if (needsParent && !pinOk(pin)) return send(res, 403, { error: 'Eltern-PIN nötig' });
       if (b.op === 'testDevice') {
         const d = S.devices.find((x) => x.id === b.id);
