@@ -119,3 +119,10 @@ h3{font-size:14px;font-weight:800;color:var(--muted);margin:18px 0 8px;text-tran
 .steps .sub li{margin-bottom:6px}
 html,body{transition:background-color .2s}
 .reward.off button{color:var(--muted)}
+.modal textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:var(--field);font:inherit;font-size:14px;resize:vertical;margin-top:8px}
+.modal{max-height:calc(100vh - 40px);overflow:auto}
+.imp{list-style:none;padding:0;margin:6px 0 0;max-height:220px;overflow:auto;font-size:14px}
+.imp li{display:flex;gap:8px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line)}
+.imp li span{flex:1;font-weight:700}
+.imp li small{color:var(--muted);font-size:12px;width:96px;text-align:right}
+.modal code{background:var(--chip);border-radius:6px;padding:1px 5px;font-size:12px}

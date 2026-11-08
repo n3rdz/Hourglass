@@ -218,6 +218,31 @@ async function copyText(t, btn) {
   if (btn) { const o = btn.textContent; btn.textContent = ok ? '✓ Kopiert' : 'Bitte markieren'; setTimeout(() => { btn.textContent = o; }, 1800); }
 }
 
+/* ---------- Aufgaben-Import ---------- */
+function guessCat(name) {
+  const t = name.toLowerCase();
+  if (/hausaufgabe|\btest|klassenarbeit|schulaufgabe|vokabel|lern|schule|referat/.test(t)) return 'schule';
+  if (/instrument|klavier|gitarre|geige|flöte|üb(en|t)|musik|trompete|schlagzeug/.test(t)) return 'musik';
+  if (/zähne|zahn|schlafanzug|anziehen|duschen|baden|gelesen|lesen|bett/.test(t)) return 'sonst';
+  return 'haushalt';
+}
+function parseTasks(text) {
+  const out = [];
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.trim(); if (!line) continue;
+    const m = line.match(/^(.*?)[\s:;,=\-–]+(\d{1,4})\s*(?:p|pkt|punkte)?\.?$/i);
+    if (!m || !m[1].trim()) continue;
+    out.push({ name: m[1].trim().replace(/\s+/g, ' '), pts: parseInt(m[2], 10) });
+  }
+  return out;
+}
+function importPreview(list) {
+  if (!list.length) return '<p class="hint">Noch keine gültigen Zeilen erkannt. Format: <code>Aufgabe  Punkte</code></p>';
+  const known = new Map(S.tasks.map((t) => [t.name.toLowerCase(), t]));
+  return `<p class="hint">${list.length} Aufgabe${list.length > 1 ? 'n' : ''} erkannt:</p><ul class="imp">${list.map((x) => { const k = known.get(x.name.toLowerCase());
+    return `<li><span>${CATS[guessCat(x.name)].e} ${esc(x.name)}</span><b>${x.pts}</b>${k ? `<small>${k.pts === x.pts ? 'schon vorhanden' : `ändert ${k.pts} → ${x.pts}`}</small>` : '<small>neu</small>'}</li>`; }).join('')}</ul>`;
+}
+
 function printerCard() {
   const pr = S.cfg.printer || {};
   return `<section class="card"><h2>🖨️ Bondrucker</h2>
@@ -253,7 +278,7 @@ function settings() {
   const catOpts = (c) => Object.entries(CATS).map(([k, m]) => `<option value="${k}" ${k === c ? 'selected' : ''}>${m.e} ${m.n}</option>`).join('');
   return `<header class="top"><button class="icon" data-a="go" data-v="home" aria-label="Zurück">←</button><div class="brand" style="flex:1;font-size:22px">Einstellungen</div></header>
   <section class="card"><h2>Kinder</h2>${S.kids.map((k) => `<div class="row"><button class="eb" data-a="emoji" data-id="${k.id}" title="Symbol wechseln">${esc(k.emoji)}</button><input class="grow" value="${esc(k.name)}" data-c="kids" data-id="${k.id}" data-f="name" aria-label="Name"><button class="sw" style="background:${k.color}" data-a="color" data-id="${k.id}" title="Farbe wechseln"></button><button class="del" data-a="del" data-c="kids" data-id="${k.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addKid">+ Kind</button></section>
-  <section class="card"><h2>Aufgaben</h2>${S.tasks.map((t) => `<div class="row wrap"><input class="grow" value="${esc(t.name)}" data-c="tasks" data-id="${t.id}" data-f="name" aria-label="Aufgabe"><select data-c="tasks" data-id="${t.id}" data-f="cat">${catOpts(t.cat)}</select><input class="num" type="number" min="0" inputmode="numeric" value="${t.pts}" data-c="tasks" data-id="${t.id}" data-f="pts" aria-label="Punkte"><button class="del" data-a="del" data-c="tasks" data-id="${t.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addTask">+ Aufgabe</button></section>
+  <section class="card"><h2>Aufgaben</h2>${S.tasks.map((t) => `<div class="row wrap"><input class="grow" value="${esc(t.name)}" data-c="tasks" data-id="${t.id}" data-f="name" aria-label="Aufgabe"><select data-c="tasks" data-id="${t.id}" data-f="cat">${catOpts(t.cat)}</select><input class="num" type="number" min="0" inputmode="numeric" value="${t.pts}" data-c="tasks" data-id="${t.id}" data-f="pts" aria-label="Punkte"><button class="del" data-a="del" data-c="tasks" data-id="${t.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addTask">+ Aufgabe</button> <button class="add" data-a="importTasks">📋 Liste einfügen</button></section>
   <section class="card"><h2>Belohnungen</h2>${S.rewards.map((r) => `<div class="row"><input class="emo" value="${esc(r.emoji)}" data-c="rewards" data-id="${r.id}" data-f="emoji" aria-label="Symbol"><input class="grow" value="${esc(r.name)}" data-c="rewards" data-id="${r.id}" data-f="name" aria-label="Belohnung"><input class="num" type="number" min="0" inputmode="numeric" value="${r.cost}" data-c="rewards" data-id="${r.id}" data-f="cost" aria-label="Kosten"><button class="del" data-a="del" data-c="rewards" data-id="${r.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addReward">+ Belohnung</button></section>
   <section class="card"><h2>Medienzeit</h2><div class="row"><span class="grow" style="font-weight:700">Punkte pro Minute Medienzeit</span><input class="num" type="number" min="0.1" step="0.1" inputmode="decimal" value="${rate()}" data-a="mediaRate" aria-label="Punkte pro Minute"></div>
    <h3>Geräte</h3>${(S.devices || []).map((d) => `<div class="row wrap"><input class="emo" value="${esc(d.emoji)}" data-c="devices" data-id="${d.id}" data-f="emoji" aria-label="Symbol"><input style="flex:1" value="${esc(d.name)}" data-c="devices" data-id="${d.id}" data-f="name" aria-label="Gerät"><button class="del" data-a="del" data-c="devices" data-id="${d.id}" aria-label="Löschen">✕</button>
@@ -362,11 +387,23 @@ document.addEventListener('click', async (ev) => {
     case 'theme': { const order = ['auto', 'light', 'dark']; setTheme(order[(order.indexOf(theme) + 1) % 3]); render(); toast(`${THEMES[theme].i} Darstellung: ${THEMES[theme].n}`); break; }
     case 'testPrint': { b.disabled = true; try { await api('/api/op', { op: 'testPrint' }); toast('🖨️ Testdruck gesendet'); } catch (e) { toast('❌ ' + e.message); } b.disabled = false; break; }
     case 'print': { try { await api('/api/op', { op: 'printEntry', id }); toast('🖨️ Bon wird gedruckt'); } catch (e) { toast('❌ ' + e.message); } break; }
+    case 'importTasks':
+      modal(`<h4>📋 Aufgaben aus Liste einfügen</h4><p>Eine Aufgabe pro Zeile, die Punkte am Ende, z. B. <code>Katzen füttern 5</code>. Vorhandene Aufgaben mit gleichem Namen bekommen die neuen Punkte. Die Kategorie wird geraten und lässt sich danach ändern.</p>
+        <textarea id="impText" rows="8" placeholder="Kinderzimmer aufgeräumt 30
+Tisch decken 5
+Katzen füttern 5"></textarea><div id="impPrev"></div>`, 'Übernehmen', () => {
+        const list = parseTasks(document.getElementById('impText').value); if (!list.length) return false;
+        const known = new Map(S.tasks.map((t) => [t.name.toLowerCase(), t])); let added = 0, changed = 0;
+        for (const x of list) { const k = known.get(x.name.toLowerCase());
+          if (k) { if (k.pts !== x.pts) { k.pts = x.pts; changed++; } } else { const t = { id: uid(), name: x.name.slice(0, 80), cat: guessCat(x.name), pts: Math.min(1000, x.pts) }; S.tasks.push(t); known.set(t.name.toLowerCase(), t); added++; } }
+        saveSettings(true); toast(`${added} neu, ${changed} geändert`); });
+      break;
     case 'checkUpd': checkUpd(); break;
     case 'applyUpd': applyUpd(); break;
   }
 });
 document.addEventListener('input', (ev) => {
+  if (ev.target.id === 'impText') { const pv = document.getElementById('impPrev'); if (pv) pv.innerHTML = importPreview(parseTasks(ev.target.value)); return; }
   const el = ev.target; if (!el.dataset || !el.dataset.g) return;
   lsSet(el.dataset.g === 'base' ? 'hourglass-ha-base' : 'hourglass-ha-entity', el.value.trim());
   const v = haValues(); const y = document.getElementById('haYaml'), u = document.getElementById('haUrl');
