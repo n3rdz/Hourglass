@@ -54,7 +54,7 @@ async function op(o) {
   try { const r = await api('/api/op', o); S = r.state; render(); return r; }
   catch (e) { if (e.status === 403) { pinValid = false; askPin(); } else toast(e.message); throw e; }
 }
-async function refresh() { S = await api('/api/state'); if (!(view === 'settings' && document.activeElement && document.activeElement.matches('input,select'))) render(); }
+async function refresh() { S = await api('/api/state'); if (!drag && !(view === 'settings' && document.activeElement && document.activeElement.matches('input,select'))) render(); }
 function connect() {
   const es = new EventSource('/api/events');
   es.onopen = () => { online = true; updSync(); };
@@ -278,7 +278,7 @@ function settings() {
   const catOpts = (c) => Object.entries(CATS).map(([k, m]) => `<option value="${k}" ${k === c ? 'selected' : ''}>${m.e} ${m.n}</option>`).join('');
   return `<header class="top"><button class="icon" data-a="go" data-v="home" aria-label="Zurück">←</button><div class="brand" style="flex:1;font-size:22px">Einstellungen</div></header>
   <section class="card"><h2>Kinder</h2>${S.kids.map((k) => `<div class="row"><button class="eb" data-a="emoji" data-id="${k.id}" title="Symbol wechseln">${esc(k.emoji)}</button><input class="grow" value="${esc(k.name)}" data-c="kids" data-id="${k.id}" data-f="name" aria-label="Name"><button class="sw" style="background:${k.color}" data-a="color" data-id="${k.id}" title="Farbe wechseln"></button><button class="del" data-a="del" data-c="kids" data-id="${k.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addKid">+ Kind</button></section>
-  <section class="card"><h2>Aufgaben</h2>${S.tasks.map((t) => `<div class="row wrap"><input class="grow" value="${esc(t.name)}" data-c="tasks" data-id="${t.id}" data-f="name" aria-label="Aufgabe"><select data-c="tasks" data-id="${t.id}" data-f="cat">${catOpts(t.cat)}</select><input class="num" type="number" min="0" inputmode="numeric" value="${t.pts}" data-c="tasks" data-id="${t.id}" data-f="pts" aria-label="Punkte"><button class="del" data-a="del" data-c="tasks" data-id="${t.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addTask">+ Aufgabe</button> <button class="add" data-a="importTasks">📋 Liste einfügen</button></section>
+  <section class="card"><h2>Aufgaben</h2><p class="hint" style="margin-top:-4px">Mit ⠿ nach oben oder unten ziehen, um die Reihenfolge zu ändern.</p><div class="sortlist">${S.tasks.map((t) => `<div class="row wrap" data-row="tasks" data-id="${t.id}"><span class="handle" data-drag="tasks" title="Ziehen zum Sortieren" aria-label="Verschieben">⠿</span><input class="grow" value="${esc(t.name)}" data-c="tasks" data-id="${t.id}" data-f="name" aria-label="Aufgabe"><select data-c="tasks" data-id="${t.id}" data-f="cat">${catOpts(t.cat)}</select><input class="num" type="number" min="0" inputmode="numeric" value="${t.pts}" data-c="tasks" data-id="${t.id}" data-f="pts" aria-label="Punkte"><button class="del" data-a="del" data-c="tasks" data-id="${t.id}" aria-label="Löschen">✕</button></div>`).join('')}</div><button class="add" data-a="addTask">+ Aufgabe</button> <button class="add" data-a="importTasks">📋 Liste einfügen</button></section>
   <section class="card"><h2>Belohnungen</h2>${S.rewards.map((r) => `<div class="row"><input class="emo" value="${esc(r.emoji)}" data-c="rewards" data-id="${r.id}" data-f="emoji" aria-label="Symbol"><input class="grow" value="${esc(r.name)}" data-c="rewards" data-id="${r.id}" data-f="name" aria-label="Belohnung"><input class="num" type="number" min="0" inputmode="numeric" value="${r.cost}" data-c="rewards" data-id="${r.id}" data-f="cost" aria-label="Kosten"><button class="del" data-a="del" data-c="rewards" data-id="${r.id}" aria-label="Löschen">✕</button></div>`).join('')}<button class="add" data-a="addReward">+ Belohnung</button></section>
   <section class="card"><h2>Medienzeit</h2><div class="row"><span class="grow" style="font-weight:700">Punkte pro Minute Medienzeit</span><input class="num" type="number" min="0.1" step="0.1" inputmode="decimal" value="${rate()}" data-a="mediaRate" aria-label="Punkte pro Minute"></div>
    <h3>Geräte</h3>${(S.devices || []).map((d) => `<div class="row wrap"><input class="emo" value="${esc(d.emoji)}" data-c="devices" data-id="${d.id}" data-f="emoji" aria-label="Symbol"><input style="flex:1" value="${esc(d.name)}" data-c="devices" data-id="${d.id}" data-f="name" aria-label="Gerät"><button class="del" data-a="del" data-c="devices" data-id="${d.id}" aria-label="Löschen">✕</button>
@@ -418,6 +418,49 @@ document.addEventListener('change', (ev) => {
   const f = el.dataset.f; it[f] = (f === 'pts' || f === 'cost') ? Math.max(0, n(el.value)) : (el.value.trim() || it[f]); saveSettings();
 });
 document.addEventListener('keydown', (ev) => { if (!mEl.innerHTML) return; if (ev.key === 'Escape') closeModal(); if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') runOk(); });
+
+/* ---------- Sortieren per Drag & Drop (Maus + Touch) ---------- */
+let drag = null;
+document.addEventListener('pointerdown', (ev) => {
+  const h = ev.target.closest('[data-drag]'); if (!h || !S) return;
+  ev.preventDefault();
+  const row = h.closest('[data-row]'), c = h.dataset.drag;
+  const list = [...row.parentNode.querySelectorAll(`[data-row="${c}"]`)];
+  const rects = list.map((r) => { const b = r.getBoundingClientRect(); return { top: b.top + scrollY, h: b.height }; });
+  const from = list.indexOf(row);
+  const slot = list.length > 1 ? (from < list.length - 1 ? rects[from + 1].top - rects[from].top : rects[from].top - rects[from - 1].top) : rects[from].h;
+  drag = { c, list, rects, row, from, to: from, slot, startY: ev.clientY + scrollY };
+  try { h.setPointerCapture(ev.pointerId); } catch (e) {}
+  row.classList.add('dragging'); document.body.classList.add('sorting');
+});
+document.addEventListener('pointermove', (ev) => {
+  if (!drag) return;
+  if (ev.clientY < 70) scrollBy(0, -12); else if (ev.clientY > innerHeight - 70) scrollBy(0, 12);
+  const dy = ev.clientY + scrollY - drag.startY;
+  drag.row.style.transform = `translateY(${dy}px)`;
+  const mid = drag.rects[drag.from].top + drag.rects[drag.from].h / 2 + dy;
+  let to = 0; drag.rects.forEach((r, i) => { if (i !== drag.from && r.top + r.h / 2 < mid) to++; });
+  drag.to = to;
+  drag.list.forEach((r, i) => {
+    if (i === drag.from) return;
+    let shift = 0;
+    if (drag.from < to && i > drag.from && i <= to) shift = -drag.slot;
+    if (to < drag.from && i >= to && i < drag.from) shift = drag.slot;
+    r.style.transform = shift ? `translateY(${shift}px)` : '';
+  });
+});
+function endDrag() {
+  if (!drag) return;
+  const d = drag; drag = null; document.body.classList.remove('sorting');
+  d.list.forEach((r) => { r.style.transform = ''; r.classList.remove('dragging'); });
+  if (d.to === d.from) return;
+  const ids = d.list.map((r) => r.dataset.id); const [m] = ids.splice(d.from, 1); ids.splice(d.to, 0, m);
+  const byId = new Map(S[d.c].map((x) => [x.id, x]));
+  S[d.c] = [...ids.map((id) => byId.get(id)).filter(Boolean), ...S[d.c].filter((x) => !ids.includes(x.id))];
+  render(); saveSettings(true);
+}
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 render();
