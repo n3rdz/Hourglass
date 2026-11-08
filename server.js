@@ -22,7 +22,8 @@ const DEFAULT = {
     { id: 'k2', name: 'Kind 2', emoji: '🐼', color: '#4C9AFF', pts: 0 },
   ],
   tasks: [
-    ['t1', 'Spülmaschine ausräumen', 'haushalt', 10], ['t2', 'Tisch decken / abräumen', 'haushalt', 5],
+    ['t1', 'Spülmaschine ausräumen', 'haushalt', 10], ['t12', 'Spülmaschine einräumen', 'haushalt', 5],
+    ['t2', 'Kompletten Tisch abräumen', 'haushalt', 10],
     ['t3', 'Zimmer aufräumen', 'haushalt', 20], ['t4', 'Müll rausbringen', 'haushalt', 5],
     ['t5', 'Wäsche zusammenlegen', 'haushalt', 10], ['t6', 'Hausaufgaben erledigt', 'schule', 20],
     ['t7', 'Für Test gelernt', 'schule', 30], ['t8', 'Vokabeln geübt', 'schule', 10],
