@@ -1,6 +1,6 @@
 (() => {
 'use strict';
-const CATS = { haushalt: { n: 'Haushalt', e: '🧹' }, tiere: { n: 'Tiere', e: '🐈', svg: '<svg class="ci" viewBox="0 0 24 24" aria-hidden="true"><path fill="#E5484D" d="M4.2 2.6c.4-.3 1-.2 1.3.2L8.4 6.4A10.6 10.6 0 0 1 12 5.8c1.3 0 2.5.2 3.6.6l2.9-3.6c.3-.4.9-.5 1.3-.2.3.2.4.5.4.9v6.7c.9 1.3 1.4 2.8 1.4 4.4 0 4.6-4.2 7.6-9.6 7.6S2.4 19.2 2.4 14.6c0-1.6.5-3.1 1.4-4.4V3.5c0-.4.1-.7.4-.9z"/><ellipse cx="8.6" cy="13.6" rx="1.3" ry="1.7" fill="#fff"/><ellipse cx="15.4" cy="13.6" rx="1.3" ry="1.7" fill="#fff"/><path d="M10.9 17.2h2.2L12 18.4z" fill="#fff"/></svg>' }, garten: { n: 'Garten', e: '🌱' }, schule: { n: 'Schule', e: '📚' }, musik: { n: 'Musik', e: '🎵' }, bett: { n: 'Bett', e: '🛏️' }, sonst: { n: 'Sonstiges', e: '⭐' } };
+const CATS = { haushalt: { n: 'Haushalt', e: '🧹' }, tiere: { n: 'Tiere', e: '🐈' }, garten: { n: 'Garten', e: '🌱' }, schule: { n: 'Schule', e: '📚' }, musik: { n: 'Musik', e: '🎵' }, bett: { n: 'Bett', e: '🛏️' }, sonst: { n: 'Sonstiges', e: '⭐' } };
 const COLORS = ['#FF7A59', '#4C9AFF', '#2FB37A', '#A97BE8', '#F2A31B', '#E8578A'];
 const EMOJIS = ['🦊', '🐼', '🦁', '🐸', '🐙', '🦄', '🐯', '🐨', '🐶', '🐱', '🚀', '⚽', '🌟', '🦖'];
 const catIcon = (c) => (CATS[c] && (CATS[c].svg || CATS[c].e)) || '⭐';
