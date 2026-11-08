@@ -1,0 +1,14 @@
+services:
+  punktekonto:
+    build: .
+    container_name: punktekonto
+    restart: unless-stopped        # wichtig: startet die App nach einem Update neu
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/app                    # Git-Checkout (Code + data/)
+      # Für private Repos per SSH zusätzlich:
+      # - ~/.ssh:/root/.ssh:ro
+    environment:
+      - TZ=Europe/Berlin
+      # - GIT_BRANCH=main          # optional, sonst aktueller Branch
