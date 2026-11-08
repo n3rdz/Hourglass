@@ -92,3 +92,6 @@ h3{font-size:14px;font-weight:800;color:var(--muted);margin:18px 0 8px;text-tran
 .overlay{position:fixed;inset:0;background:rgba(251,247,240,.94);display:grid;place-items:center;z-index:50;font-weight:900;font-size:20px;text-align:center}
 .overlay small{display:block;font-weight:700;font-size:14px;color:var(--muted);margin-top:6px}
 .err{color:var(--bad);font-weight:800;font-size:14px;margin-top:8px}
+.row.wrap{flex-wrap:wrap}
+.row.wrap .grow{flex:1 1 100%}
+.row.wrap select{flex:1}
