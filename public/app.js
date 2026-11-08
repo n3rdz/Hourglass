@@ -6,6 +6,7 @@ const EMOJIS = ['🦊', '🐼', '🦁', '🐸', '🐙', '🦄', '🐯', '🐨', 
 const PINKEY = 'punktekonto-pin';
 
 let S = null, online = false, view = 'home', tab = 'earn', pinValid = false, version = null, upd = null;
+try { view = sessionStorage.getItem('pk-view') || 'home'; tab = sessionStorage.getItem('pk-tab') || 'earn'; } catch (e) {}
 let pin = ''; try { pin = localStorage.getItem(PINKEY) || ''; } catch (e) {}
 
 const root = document.getElementById('root');
@@ -143,6 +144,7 @@ function render() {
   let k; if (view.startsWith('kid:')) { k = kidById(view.slice(4)); if (!k) view = 'home'; }
   if (view === 'settings' && !isParent()) view = 'home';
   root.innerHTML = view === 'settings' ? settings() : k ? kidView(k) : home(); updSync();
+  try { sessionStorage.setItem('pk-view', view); sessionStorage.setItem('pk-tab', tab); } catch (e) {}
 }
 
 /* ---------- Einstellungen speichern ---------- */

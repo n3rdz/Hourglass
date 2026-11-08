@@ -18,8 +18,8 @@ const DEFAULT = {
   v: 1, rev: 0,
   cfg: { pinHash: '', pinSalt: '', openBooking: false, mediaRate: 1 },
   kids: [
-    { id: 'k1', name: 'Kind 1', emoji: '🦊', color: '#FF7A59', pts: 0 },
-    { id: 'k2', name: 'Kind 2', emoji: '🐼', color: '#4C9AFF', pts: 0 },
+    { id: 'k1', name: 'Theo', emoji: '🦊', color: '#FF7A59', pts: 0 },
+    { id: 'k2', name: 'Ava', emoji: '🐼', color: '#4C9AFF', pts: 0 },
   ],
   tasks: [
     ['t1', 'Spülmaschine ausräumen', 'haushalt', 10], ['t12', 'Spülmaschine einräumen', 'haushalt', 5],
