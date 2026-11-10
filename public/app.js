@@ -391,7 +391,8 @@ function applyUpd() {
 /* ---------- Events ---------- */
 document.addEventListener('click', async (ev) => {
   const m = ev.target.closest('[data-m]');
-  if (m) { if (m.dataset.m === 'ok') runOk(); else if (m.dataset.m === 'cancel' || ev.target === m) closeModal(); return; }
+  // Nur echte Dialog-Knöpfe bzw. ein Klick direkt auf den Hintergrund schließen; Knöpfe im Dialog (z. B. −10/+5) laufen normal weiter
+  if (m && (m.dataset.m !== 'bg' || ev.target === m)) { if (m.dataset.m === 'ok') runOk(); else closeModal(); return; }
   const b = ev.target.closest('[data-a]'); if (!b || !S) return; const a = b.dataset.a, id = b.dataset.id;
   const cur = view.startsWith('kid:') ? kidById(view.slice(4)) : null;
   const need = (ok, fn) => (ok ? fn() : askPin(fn));
